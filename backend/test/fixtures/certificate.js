@@ -18,7 +18,18 @@ const DEFAULT_FIELDS = {
 const ROW = { issuer: 0, docType: 1, holder: 2, idNumber: 3, dob: 4, programme: 5, cgpa: 6, issuedOn: 7 };
 const rowY = (i) => 215 + i * 55;
 
-function svg(fields, { extra = [], photo = true } = {}) {
+// The photo sits entirely inside ONE cell of Tier 3's 4x4 grid (column 3, row 1: x 0.75-1.0, y 0.25-0.5 of the page),
+// so replacing it can be localised to a single cell.
+const PHOTO = { x: 780, y: 185, w: 160, h: 125 };
+/** A portrait placeholder. `style` lets a test swap in a different "person". */
+function photoBox(style = 'a') {
+    const { x, y, w, h } = PHOTO;
+    const head = style === 'a' ? `<circle cx="${x + 80}" cy="${y + 40}" r="26" fill="#888"/>` : `<ellipse cx="${x + 80}" cy="${y + 48}" rx="22" ry="34" fill="#222"/>`;
+    const body = style === 'a' ? `<rect x="${x + 40}" y="${y + 80}" width="80" height="36" fill="#888"/>` : `<rect x="${x + 25}" y="${y + 88}" width="110" height="30" fill="#444"/>`;
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${style === 'a' ? '#ddd' : '#bbb'}" stroke="black" stroke-width="2"/>${head}${body}`;
+}
+
+function svg(fields, { extra = [], photo = true, photoStyle = 'a' } = {}) {
     const p = fields.payload || {};
     const rows = [
         `Issuer: ${fields.issuer}`, `Document: ${fields.docType}`, `Name: ${fields.holder}`, `Register No: ${fields.idNumber}`,
@@ -30,7 +41,7 @@ function svg(fields, { extra = [], photo = true } = {}) {
 <text x="${W / 2}" y="125" text-anchor="middle" font-family="Arial" font-size="30">CERTIFICATE OF GRADUATION</text>
 <line x1="60" y1="150" x2="${W - 60}" y2="150" stroke="black" stroke-width="2"/>
 ${rows.map((t, i) => `<text x="60" y="${rowY(i)}" font-family="Arial" font-size="30" fill="black">${esc(t)}</text>`).join('\n')}
-${photo ? `<rect x="760" y="190" width="180" height="220" fill="#ddd" stroke="black" stroke-width="2"/><circle cx="850" cy="270" r="40" fill="#999"/><rect x="800" y="320" width="100" height="70" fill="#999"/>` : ''}
+${photo ? photoBox(photoStyle) : ''}
 </svg>`;
 }
 
@@ -50,6 +61,24 @@ async function paintOver(png, row, newText) {
 
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
+/**
+ * A procedural "photograph": smooth, seeded random structure, so photo 11 and photo 22 differ the way two people's photos do.
+ * (The flat placeholder portraits are too alike to stand in for different people.)
+ */
+async function proceduralPhoto(seed, w = PHOTO.w, h = PHOTO.h) {
+    let s = seed;
+    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    const raw = Buffer.alloc(w * h * 3);
+    for (let i = 0; i < raw.length; i++) raw[i] = Math.floor(rnd() * 256);
+    return sharp(raw, { raw: { width: w, height: h, channels: 3 } }).blur(14).normalise().png().toBuffer();
+}
+
+/** The certificate with a procedural photo in the photo box. Different seeds are different people's photos. */
+async function renderWithPhoto(seed, fields = DEFAULT_FIELDS, options = {}) {
+    const base = await sharp(Buffer.from(svg(fields, { ...options, photo: false }))).png().toBuffer();
+    return sharp(base).composite([{ input: await proceduralPhoto(seed), left: PHOTO.x, top: PHOTO.y }]).png().toBuffer();
+}
+
 // ---- ways a picture of the certificate gets damaged -------------------------------------------------
 const jpeg = (q) => async (png) => sharp(png).jpeg({ quality: q, chromaSubsampling: '4:2:0' }).toBuffer();
 const shrink = (f) => async (png) => sharp(png).resize(Math.round(W * f)).png().toBuffer();
@@ -68,6 +97,6 @@ const angled = (quad) => async (png) => {
 };
 
 module.exports = {
-    DEFAULT_FIELDS, W, H, ROW, render, withFields, paintOver, sha256, svg,
+    DEFAULT_FIELDS, W, H, ROW, PHOTO, render, renderWithPhoto, proceduralPhoto, withFields, paintOver, sha256, svg,
     jpeg, shrink, noise, rotated, dim, blur, pipe, angled,
 };

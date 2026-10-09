@@ -9,8 +9,11 @@ const TEMPLATE = {
     name: 'certificate-v1',
     // Parts of the page that are not text. OCR is blind to them: left alone, grain and texture in a photo box get "read" as
     // stray letters at the end of nearby lines. The pictures themselves are checked by Tier 3 (appearance), not here.
-    // Coordinates are fractions of the flattened page: { x0, y0, x1, y1 }.
-    ignoreRegions: [{ name: 'photo', x0: 0.74, y0: 0.25, x1: 0.96, y1: 0.62 }],
+    // Coordinates are fractions of the flattened page, CROPPED TO ITS PRINTED CONTENT (see imaging.cropToContent): { x0, y0, x1, y1 }.
+    ignoreRegions: [{ name: 'photo', x0: 0.78, y0: 0.24, x1: 1.0, y1: 0.51 }],
+    // Where the photo sits (same coordinates). Tier 3 hashes this region on its own: a swapped photo shows up there far more
+    // clearly than in its 4x4 grid tile, where the white margin around the photo dominates the hash.
+    photoRegion: { x0: 0.8044, y0: 0.2655, x1: 0.9792, y1: 0.481 },
     fields: [
         { key: 'issuer', labels: ['Issuer'] },
         { key: 'docType', labels: ['Document'] },

@@ -66,11 +66,42 @@ test('findPageCorners finds nothing when the picture already is the page, or the
 test('flatten turns the tilted photo back into the upright page (high correlation with the original)', () => {
     const page = makePage();
     const photo = photographed(page, QUAD);
-    const flat = im.flatten(photo, im.findPageCorners(photo));
+    const flat = im.flatten(photo, im.findPageCorners(photo), { inset: 0 });   // inset 0: compare the exact quad with the original page
     const original = im.warp(page, [page.width / flat.width, 0, 0, 0, page.height / flat.height, 0, 0, 0, 1], flat.width, flat.height);
     const r = correlation(flat.data, original.data);
     assert.ok(r > 0.85, `correlation ${r.toFixed(3)}`);
     assert.ok(Math.abs(flat.width / flat.height - page.width / page.height) < 0.2, 'aspect ratio is restored approximately');
+});
+
+test('flatten pulls the corners in slightly by default, so a blurred table edge does not end up inside the page', () => {
+    const quad = [[100, 100], [900, 100], [900, 700], [100, 700]];
+    const inset = im.insetQuad(quad, 0.1);
+    assert.deepStrictEqual(inset[0], [140, 130]);
+    assert.deepStrictEqual(inset[2], [860, 670]);
+    assert.deepStrictEqual(im.insetQuad(quad, 0), quad);
+});
+
+test('cropToContent trims to the printed content plus a fixed margin, ignores dust, and leaves a blank page alone', () => {
+    const page = makePage(600, 420);
+    const wide = { data: new Uint8Array(900 * 600).fill(255), width: 900, height: 600 };     // the same page with a big white border
+    for (let y = 0; y < 420; y++) wide.data.set(page.data.subarray(y * 600, y * 600 + 600), (y + 90) * 900 + 150);
+    const a = im.cropToContent(page);
+    const b = im.cropToContent(wide);
+    assert.ok(Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1, `${a.width}x${a.height} vs ${b.width}x${b.height}`);
+    wide.data[5 * 900 + 5] = 0;                                                               // one speck of dust in the corner
+    assert.strictEqual(im.cropToContent(wide).width, b.width, 'a single dark pixel does not stretch the box');
+    const blank = { data: new Uint8Array(100 * 80).fill(255), width: 100, height: 80 };
+    assert.strictEqual(im.cropToContent(blank), blank);
+});
+
+test('maskRegions paints only the given regions white and does not touch the input', () => {
+    const g = { data: new Uint8Array(100).fill(10), width: 10, height: 10 };
+    const m = im.maskRegions(g, [{ x0: 0.5, y0: 0, x1: 1, y1: 0.5 }]);
+    assert.strictEqual(m.data[0 * 10 + 7], 255);
+    assert.strictEqual(m.data[0 * 10 + 2], 10);
+    assert.strictEqual(m.data[7 * 10 + 7], 10);
+    assert.strictEqual(g.data[0 * 10 + 7], 10, 'the original is unchanged');
+    assert.strictEqual(im.maskRegions(g, []), g);
 });
 
 test('estimateSkew finds a small tilt, turning by it straightens the page, and an upright page is left alone', () => {

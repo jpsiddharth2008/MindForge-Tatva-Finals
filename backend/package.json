@@ -8,7 +8,8 @@
     "hash-password": "node scripts/hash-password.js",
     "check-bucket": "node scripts/check-bucket.js",
     "reconcile": "node scripts/reconcile.js",
-    "robustness": "node scripts/robustness.js"
+    "robustness": "node scripts/robustness.js",
+    "calibrate-tier3": "node scripts/calibrate-tier3.js"
   },
   "keywords": [],
   "author": "",

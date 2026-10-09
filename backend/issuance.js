@@ -47,7 +47,7 @@ function createIssuance({
      * content hash is the SAME document re-captured (a new photo, a scan): it is reported as a duplicate, never issued again.
      * @returns {{outcome: 'issued'|'duplicate'|'in_progress', document, key, alreadyStored?}}
      */
-    async function issue({ hash, buffer, contentType, originalName, size, issuerName, tier2 }) {
+    async function issue({ hash, buffer, contentType, originalName, size, issuerName, tier2, visual }) {
         let doc = await documents.findBySha256(hash);
 
         if (!doc && tier2) {
@@ -73,10 +73,15 @@ function createIssuance({
             }
         } else {
             try {
+                // Tier 3 look-hash: computed only now that a NEW record is really being created (a duplicate never pays for it).
+                // It may be a value or a function returning one; a failure here must never stop the issuance.
+                let look;
+                if (visual) { try { look = typeof visual === 'function' ? await visual() : visual; } catch { look = undefined; } }
                 doc = await documents.create({
                     sha256: hash, byteHash: hash, s3Key: hash, originalFileName: originalName, mimeType: contentType,
                     size, issuerName, chainId, contractAddress, status: 'PENDING',
                     ...(tier2 ? { contentHash: tier2.contentHash, lookupKey: tier2.lookupKey, canonicalRecord: tier2.record, ocrCheck: tier2.ocrCheck } : {}),
+                    ...(look ? { visual: look } : {}),
                 });
             } catch (err) {
                 if (!(err instanceof DuplicateDocumentError)) throw err;

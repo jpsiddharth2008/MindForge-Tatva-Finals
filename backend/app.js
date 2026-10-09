@@ -10,6 +10,8 @@ const { publicView } = require('./documents');
 const { createIssuance } = require('./issuance');
 const { createChain } = require('./chain');
 const { analyseImage, compareToAnchor } = require('./tier2');
+const { analyseVisual } = require('./phash');
+const { TEMPLATE } = require('./extract');
 const { contentHash: computeContentHash, lookupKey: computeLookupKey, FieldError } = require('./content-hash');
 const { ACTIONS, OUTCOMES } = require('./audit');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
@@ -43,6 +45,7 @@ function createApp({
     issuanceOptions = {},                      // staleMs / stuckMs / now, for tests
     audit,                                     // audit trail (audit.js). Without it, events are not recorded.
     analyse = analyseImage,                    // reads a document image (Tier 2); replaced in tests
+    visualise = (image) => analyseVisual(image, { regions: { photo: TEMPLATE.photoRegion } }),   // how it looks (Tier 3); replaced in tests
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -141,9 +144,17 @@ function createApp({
             //     twice, and every step leaves the record in a state that can be recovered (see issuance.js).
             if (issuance) {
                 const tier2 = await tier2For(req, file, hash);
+                // Tier 3 is advisory and must never stop an issuance: if the picture cannot be analysed the record just has no look-hash.
+                // Passed as a function so it only runs when a new record is really created.
+                const visual = file.detectedMime === 'application/pdf' ? undefined : async () => {
+                    try { return await visualise(file.buffer); } catch (err) {
+                        logger.warn('could not compute the visual hash', { errorName: err && err.name, errorMessage: String((err && err.message) || err) });
+                        return undefined;
+                    }
+                };
                 const r = await issuance.issue({
                     hash, buffer: file.buffer, contentType: file.detectedMime, originalName: file.safeName,
-                    size: file.size, issuerName: req.user.sub, tier2,
+                    size: file.size, issuerName: req.user.sub, tier2, visual,
                 });
                 if (r.outcome === 'in_progress') {
                     return res.json({ success: true, duplicate: true, inProgress: true, hash, s3Key: r.key, document: publicView(r.document),

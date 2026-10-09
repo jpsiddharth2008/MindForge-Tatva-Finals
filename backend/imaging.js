@@ -171,8 +171,15 @@ function warp(gray, H, outW, outH) {
     return { data: out, width: outW, height: outH };
 }
 
+/** Moves each corner a little toward the middle. Corners found from a blurred edge sit on the table, not the paper. */
+function insetQuad(quad, fraction) {
+    const cx = quad.reduce((a, p) => a + p[0], 0) / 4; const cy = quad.reduce((a, p) => a + p[1], 0) / 4;
+    return quad.map(([x, y]) => [x + (cx - x) * fraction, y + (cy - y) * fraction]);
+}
+
 /** Flattens the quadrilateral `quad` to an upright rectangle. Output size comes from the quad's own side lengths. */
-function flatten(gray, quad) {
+function flatten(gray, rawQuad, { inset = 0.012 } = {}) {
+    const quad = insetQuad(rawQuad, inset);
     const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
     let w = Math.round(Math.max(d(quad[0], quad[1]), d(quad[3], quad[2])));
     let h = Math.round(Math.max(d(quad[0], quad[3]), d(quad[1], quad[2])));
@@ -242,28 +249,64 @@ function maskRegions(gray, regions = []) {
 }
 
 /**
- * Full pipeline: any image -> flat, upright, contrast-normalised greyscale PNG ready for OCR.
- * @param {Buffer} input
- * @param {{ignoreRegions?: Array<{x0,y0,x1,y1}>}} [options]  areas of the page that are not text (see extract.js TEMPLATE)
- * @returns {Promise<{png: Buffer, steps: {flattened: boolean, skewDegrees: number}}>}
+ * Crops to the printed content (the box around everything that is ink), plus a small fixed margin. White margins, the white
+ * wedges a rotation leaves in the corners, and a page that was scanned a little off-centre all stop mattering: two captures
+ * of the same document end up with the same content at the same relative position. A line or column counts as ink only if it
+ * holds a few dark pixels, so a speck of dust does not stretch the box. A blank page is returned unchanged.
  */
-async function prepareForOcr(input, { ignoreRegions = [] } = {}) {
+function cropToContent(gray, { padFraction = 0.02, minInkPixels = 3, dark = 128 } = {}) {
+    const { data, width, height } = gray;
+    const rows = new Uint16Array(height);
+    const cols = new Uint16Array(width);
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) if (data[y * width + x] < dark) { rows[y]++; cols[x]++; }
+    }
+    const first = (a) => a.findIndex((n) => n >= minInkPixels);
+    const last = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] >= minInkPixels) return i; return -1; };
+    const y0 = first(rows); const y1 = last(rows); const x0 = first(cols); const x1 = last(cols);
+    if (y0 < 0 || x0 < 0 || y1 <= y0 || x1 <= x0) return gray;
+    const padX = Math.round((x1 - x0 + 1) * padFraction); const padY = Math.round((y1 - y0 + 1) * padFraction);
+    const cx0 = Math.max(0, x0 - padX); const cx1 = Math.min(width - 1, x1 + padX);
+    const cy0 = Math.max(0, y0 - padY); const cy1 = Math.min(height - 1, y1 + padY);
+    const w = cx1 - cx0 + 1; const h = cy1 - cy0 + 1;
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) out.set(data.subarray((cy0 + y) * width + cx0, (cy0 + y) * width + cx1 + 1), y * w);
+    return { data: out, width: w, height: h };
+}
+
+/**
+ * Any image -> the flat, upright, contrast-stretched page (greyscale pixels). Shared by Tier 2 (OCR) and Tier 3 (look).
+ * @returns {Promise<{page: {data, width, height}, steps: {flattened: boolean, skewDegrees: number}}>}
+ */
+async function flatPage(input) {
     let page = await loadGray(input);
     const steps = { flattened: false, skewDegrees: 0 };
     const corners = findPageCorners(page);
     if (corners) { page = flatten(page, corners); steps.flattened = true; }
     const skew = estimateSkew(page);
     if (skew) { page = rotate(page, skew); steps.skewDegrees = skew; }
-    // mask AFTER the stretch: painting white first would dominate the tonal range and leave a dim page's paper grey
-    page = maskRegions(stretchContrast(page), ignoreRegions);
-    // Tesseract reads best when text is at least ~20 px tall: scale small pages up to a working width
+    // stretch first (so "dark" means the same thing on a dim photo), then crop to the content
+    return { page: cropToContent(stretchContrast(page)), steps };
+}
+
+/**
+ * Full pipeline for OCR: a flat page, with the template's non-text regions blanked, as a PNG.
+ * @param {Buffer} input
+ * @param {{ignoreRegions?: Array<{x0,y0,x1,y1}>}} [options]  areas of the page that are not text (see extract.js TEMPLATE)
+ * @returns {Promise<{png: Buffer, steps: {flattened: boolean, skewDegrees: number}}>}
+ */
+async function prepareForOcr(input, { ignoreRegions = [] } = {}) {
+    const { page: stretched, steps } = await flatPage(input);
+    // masked AFTER the stretch: painting white first would dominate the tonal range and leave a dim page's paper grey
     // (A median denoise was tried and removed: on this template it made angled photos LESS readable.)
+    const page = maskRegions(stretched, ignoreRegions);
+    // Tesseract reads best when text is at least ~20 px tall: scale small pages up to a working width
     const png = await sharp(Buffer.from(page.data), { raw: { width: page.width, height: page.height, channels: 1 } })
         .resize({ width: Math.max(page.width, 1200), withoutEnlargement: false }).png().toBuffer();
     return { png, steps };
 }
 
 module.exports = {
-    loadGray, otsu, findPageCorners, solveHomography, applyH, warp, flatten, estimateSkew, rotate, stretchContrast, maskRegions, prepareForOcr,
+    loadGray, otsu, findPageCorners, solveHomography, applyH, warp, insetQuad, flatten, estimateSkew, rotate, stretchContrast, cropToContent, maskRegions, flatPage, prepareForOcr,
     largestBlob, closeMask, polygonArea, borderBrightShare, WORK_SIDE,
 };

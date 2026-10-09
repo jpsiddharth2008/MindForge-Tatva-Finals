@@ -55,6 +55,9 @@ function buildDocumentModel(connection = mongoose) {
         // mismatch can say WHICH field changed, old against new. Never sent to clients in publicView(); issuers only.
         canonicalRecord: mongoose.Schema.Types.Mixed,
         ocrCheck: { type: String, enum: ['MATCH', 'INCONCLUSIVE', 'SKIPPED'] },   // did the printed text agree with the fields entered?
+        // Tier 3: how the document LOOKS (perceptual hashes of the page, its 16 tiles and the photo). Fuzzy values belong here,
+        // never on the blockchain. Advisory only: see phash.js. Absent for PDFs and when the picture could not be analysed.
+        visual: mongoose.Schema.Types.Mixed,
         s3Key: { type: String, required: true },
         originalFileName: String,                     // sanitised name, metadata only
         mimeType: { type: String, enum: ['application/pdf', 'image/png', 'image/jpeg'] },
