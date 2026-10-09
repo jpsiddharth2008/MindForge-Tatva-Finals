@@ -26,7 +26,7 @@ const PublicVerification = ({ goBack }) => {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await axios.post("http://localhost:5000/upload", formData);
+      const res = await axios.post("http://localhost:5000/api/hash", formData);
       const autoHash = res.data.hash;
 
       if (!window.ethereum) return alert("Please install MetaMask!");
@@ -112,7 +112,7 @@ const OfficerUpload = ({ goBack }) => {
     formData.append("file", file);
 
     try {
-      const res = await axios.post("http://localhost:5000/upload", formData);
+      const res = await axios.post("http://localhost:5000/api/anchor", formData);
       setHash(res.data.hash);
       setStatus("Cloud Upload Complete.");
     } catch (err) { setStatus("Upload Failed."); }
