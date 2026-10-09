@@ -1,0 +1,32 @@
+# Ownership map (PLAN.md Section 7.2)
+# Dev A = @jpsiddharth2008 | Dev B = @Pranay-vinod07 | Dev C = @ROHIT-JR | Member D = @just-deva
+
+# Dev A: measurement
+/core/                 @jpsiddharth2008
+/llm/                  @jpsiddharth2008
+/reliability/          @jpsiddharth2008
+/experiments/          @jpsiddharth2008
+/report/               @jpsiddharth2008
+/reports/              @jpsiddharth2008
+/tests/measurement/    @jpsiddharth2008
+/config/models.yaml    @jpsiddharth2008
+/config/audit.yaml     @jpsiddharth2008
+
+# Dev B: attack surface
+/corpus/               @Pranay-vinod07
+/channels/             @Pranay-vinod07
+/swarm/                @Pranay-vinod07
+/tests/attack/         @Pranay-vinod07
+/config/swarm.yaml     @Pranay-vinod07
+
+# Dev C: guard and demo
+/guard/                @ROHIT-JR
+/ui/                   @ROHIT-JR
+/demo/                 @ROHIT-JR
+/tests/guard/          @ROHIT-JR
+/config/gateway.yaml   @ROHIT-JR
+
+# Member D: pitch, docs and QA
+/docs/                 @just-deva
+/*.md                  @just-deva
+/.github/CODEOWNERS    @just-deva
