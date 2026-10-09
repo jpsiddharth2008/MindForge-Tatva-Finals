@@ -83,6 +83,7 @@ function verify(input, t = THRESHOLDS) {
     if (visual.advice) {                     // Tier 3's own judgement (phash.js), already made with its measured thresholds
       tiers.visual.advice = visual.advice;
       tiers.visual.changedRegions = visual.changedRegions || [];
+      tiers.visual.unreliableRegions = visual.unreliableRegions || [];
     }
   }
   if (revoked) {
@@ -115,7 +116,9 @@ function verify(input, t = THRESHOLDS) {
       return report('INCONCLUSIVE', 'LOW', tiers, anchor,
         'Text matches, but the picture is too different from the original to compare its appearance. Request a better capture.');
     }
-    return report('AUTHENTIC_COPY', 'MEDIUM', tiers, anchor, 'Content matches and nothing in the appearance stands out; the file is a re-capture or copy.');
+    const unchecked = tiers.visual.unreliableRegions && tiers.visual.unreliableRegions.length
+      ? ` The ${tiers.visual.unreliableRegions.join(', ')} area is too plain to compare reliably, so it was not checked.` : '';
+    return report('AUTHENTIC_COPY', 'MEDIUM', tiers, anchor, `Content matches and nothing in the appearance stands out; the file is a re-capture or copy.${unchecked}`);
   }
   if (visual.distance > t.visualFar || tiers.visual.divergedCells.length > 0) {
     return report('TAMPERED_VISUAL', 'MEDIUM', tiers, anchor,

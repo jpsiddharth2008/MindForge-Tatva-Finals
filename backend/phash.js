@@ -26,6 +26,9 @@ function loadThresholds(file = THRESHOLDS_PATH) {
     for (const k of ['cellFar', 'regionFar', 'wholeFar', 'maxLocalisedCells']) {
         if (!Number.isFinite(t[k]) || t[k] < 0) throw new Error(`tier3 config: ${k} must be a non-negative number`);
     }
+    if (t.regionStableMax !== undefined && (!Number.isFinite(t.regionStableMax) || t.regionStableMax < 0)) {
+        throw new Error('tier3 config: regionStableMax must be a non-negative number');
+    }
     return t;
 }
 
@@ -120,7 +123,34 @@ async function regionHash(page, region) {
     if (w < 2 || h < 2) throw new Error('region is empty');
     const tile = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) tile.set(page.data.subarray((y0 + y) * page.width + x0, (y0 + y) * page.width + x1), y * w);
-    return phash({ data: tile, width: w, height: h });
+    const region_ = { data: tile, width: w, height: h };
+    const hash = await phash(region_);
+    return { ...hash, stability: await regionStability(region_, hash) };
+}
+
+/**
+ * How far does this region's own hash move under ordinary re-capture (JPEG, a half-size copy, a little blur)? The largest Hamming
+ * distance seen, 0..64. A textured photograph barely moves (0-6 measured). A flat graphic with hard edges (a cartoon portrait, a seal)
+ * moves a LOT (28-30 measured), as much as a different picture would: its hash cannot tell a copy from a substitution, so a region
+ * like that must not be judged at all. Measured once, when the document is issued, and stored with the hash.
+ */
+async function regionStability(region, hash) {
+    if (hash.flat) return 0;
+    const { data, width, height } = region;
+    const source = () => sharp(Buffer.from(data), { raw: { width, height, channels: 1 } });
+    const restore = async (encoded) => {
+        const { data: out, info } = await sharp(encoded).greyscale().resize(width, height, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true });
+        if (info.channels !== 1 || out.length !== width * height) throw new Error('regionStability: unexpected pixel layout');
+        return { data: new Uint8Array(out), width, height };
+    };
+    const variants = [
+        () => source().jpeg({ quality: 60 }).toBuffer(),
+        () => source().resize(Math.max(8, Math.round(width / 2))).jpeg({ quality: 70 }).toBuffer(),
+        () => source().blur(1).png().toBuffer(),
+    ];
+    let worst = 0;
+    for (const encode of variants) worst = Math.max(worst, cellDistance(hash, await phash(await restore(await encode()))));
+    return worst;
 }
 
 /**
@@ -143,6 +173,7 @@ async function analyseVisual(image, { regions = {} } = {}) {
  * @returns {{advisory: true, distance, cells, diverged, regionDistances, changedRegions, pattern}}
  *   cells: Hamming distance of every tile; diverged: [row, col] of tiles above cellFar.
  *   regionDistances / changedRegions: the same for named regions (the photo), judged against regionFar.
+ *   unreliableRegions: named regions whose hash was unstable when the document was issued (see regionStability); never judged.
  *   pattern CLOSE: nothing stands out.  LOCALISED: a few tiles and/or a named region changed while the rest held (a pasted-over
  *   photo looks like this).  GLOBAL: many tiles differ (a very different capture, crop or document): says little, and is never
  *   read as "just a re-capture, so fine".
@@ -155,12 +186,15 @@ function compareVisual(anchored, presented, thresholds = loadThresholds()) {
     for (const [name, anchoredHash] of Object.entries(anchored.regions || {})) {
         regionDistances[name] = presented.regions && presented.regions[name] ? cellDistance(anchoredHash, presented.regions[name]) : MAX_DISTANCE;
     }
-    const changedRegions = Object.keys(regionDistances).filter((n) => regionDistances[n] > thresholds.regionFar);
+    // a region whose own hash is not stable under ordinary re-capture cannot tell a copy from a substitution: say so, and do not judge it
+    const stableMax = thresholds.regionStableMax === undefined ? Infinity : thresholds.regionStableMax;
+    const unreliableRegions = Object.keys(regionDistances).filter((n) => Number.isFinite(anchored.regions[n].stability) && anchored.regions[n].stability > stableMax);
+    const changedRegions = Object.keys(regionDistances).filter((n) => regionDistances[n] > thresholds.regionFar && !unreliableRegions.includes(n));
     const distance = cellDistance(anchored.phash, presented.phash);
     let pattern = 'CLOSE';
     if (diverged.length > thresholds.maxLocalisedCells) pattern = 'GLOBAL';
     else if (diverged.length > 0 || changedRegions.length > 0) pattern = 'LOCALISED';
-    return { advisory: true, distance, cells, diverged, regionDistances, changedRegions, pattern, wholeFar: distance > thresholds.wholeFar };
+    return { advisory: true, distance, cells, diverged, regionDistances, changedRegions, unreliableRegions, pattern, wholeFar: distance > thresholds.wholeFar };
 }
 
 /**
@@ -174,6 +208,6 @@ function advice(result) {
 }
 
 module.exports = {
-    phash, regionGrid, regionHash, analyseVisual, compareVisual, advice, cellDistance, loadThresholds, dct2d, resizeGray,
+    phash, regionGrid, regionHash, analyseVisual, compareVisual, advice, cellDistance, loadThresholds, dct2d, resizeGray, regionStability,
     N, LOW, GRID, PAGE_W, PAGE_H, FLAT_STDEV, MAX_DISTANCE, THRESHOLDS_PATH,
 };

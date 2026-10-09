@@ -133,7 +133,7 @@ function createVerification({ documents, chain = null, analyse, visualise, chain
             try {
                 const look = await visualise(buffer);
                 const cmp = compareVisual(record.visual, look, thresholds);
-                visual = { advice: advice(cmp), distance: cmp.distance, cellDistances: cmp.cells, divergedCells: cmp.diverged, changedRegions: cmp.changedRegions };
+                visual = { advice: advice(cmp), distance: cmp.distance, cellDistances: cmp.cells, divergedCells: cmp.diverged, changedRegions: cmp.changedRegions, unreliableRegions: cmp.unreliableRegions };
             } catch { visual = null; }                                // appearance is advisory: failing to read it must not break verification
         }
 

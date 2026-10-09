@@ -21,6 +21,22 @@ uniform area is numerical noise.
 - `LOCALISED` a few tiles, or the photo, changed while the rest held -> advice `REVIEW` (a pasted-over region or a swapped photo looks like this)
 - `GLOBAL` many tiles differ (a very different capture, crop or document) -> advice `UNCLEAR`. It is deliberately **not** read as "just a re-capture, so fine".
 
+## Regions that cannot be judged (found by driving the real UI)
+
+A photo region is only worth judging if its hash is **stable under ordinary re-capture**. When a document is issued, each named region is
+hashed again after JPEG q60, a half-size JPEG q70 copy and a 1px blur; the largest change is stored as `stability`.
+
+| Photo box holds | `stability` (of 64) | judged? |
+|---|---|---|
+| a textured photograph (12 procedural photos) | 0 to 6 | yes |
+| a flat, hard-edged graphic (the placeholder portraits) | 28 and 30 | **no** |
+
+Why not just raise `regionFar`: for a flat graphic the re-capture distances reach 30 while a different picture starts at 16, so no single
+threshold separates them (blurring before hashing did not fix it either, measured at sigma 1 to 4). `regionStableMax` (12) sits between the
+two groups. A region above it is reported in `unreliableRegions`, never in `changedRegions`, and the verdict says the photo area "was not
+checked". Before this, a JPEG copy of such a certificate was wrongly reported as `TAMPERED_VISUAL`. The cost is honest: on such a certificate a
+photo swap is not detected by Tier 3 at all. Records issued before this was measured have no `stability` and are judged as before.
+
 ## Measured, on simulated captures (`npm run calibrate-tier3`)
 
 | | result |
@@ -40,6 +56,6 @@ uniform area is numerical noise.
 
 ## What is NOT yet known
 
-All numbers come from **simulated** captures of **one synthetic** certificate with **procedural** photos. Real phones, real cards and real
+All numbers come from **simulated** captures of **one synthetic** certificate with **procedural** photos (and two flat placeholder portraits). Real phones, real cards and real
 photo-swap forgeries have not been measured. The thresholds must be re-calibrated on a real sample (`npm run calibrate-tier3`) before anyone
 relies on them.
