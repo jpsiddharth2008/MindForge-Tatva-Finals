@@ -364,8 +364,8 @@ Status is tracked honestly so that documentation never overstates the code. ✅ 
 | Revocation | ✅ | `revoke()` is sent by the issuer's wallet; the server reads the reason and time **from the chain** before mirroring it; the public verdict and the officer's page show both. Tested against a real EVM and in a real browser | #59 |
 | QR verification | ✅ | the code holds pointers only; verification recomputes the document's own hash and requires it to match (`QR_MISMATCH`). Scanning from a photo or the camera; tested by scanning the image the issuing page drew | #58 |
 | Officer dashboard, routing, error boundary | ✅ | login, paged document list with status counts and filter, issue form, document page (transaction link, QR, history, revoke), public verify page, not-found page, error boundary; 401 returns to login | #60 |
-| Forgery test corpus | ❌ | tests use synthetic fixtures generated in code | #74 |
-| Tests | 🟡 | `cd backend && npm test` (342, real MongoDB in memory), `cd blockchain && npx hardhat test` (42, real EVM), `cd frontend && npm test` (97, jsdom). Also driven by hand in a real browser against a local chain; **not tested against real S3, Atlas, Polygon or a real wallet extension** | — |
+| Forgery test corpus | 🟡 | `corpus/`: 14 synthetic files (genuine, tampered L1-L3, negative controls), a manifest and `npm run corpus`, which prints a confusion matrix: genuine 5/5, tampered 6/6, negatives 3/3. **Print, scan, photo and WhatsApp steps are simulated, not real**; `corpus/CAPTURE.md` is the procedure for real ones and `npm run corpus -- --dir` judges them by the same expectations | #74 |
+| Tests | 🟡 | `cd backend && npm test` (349, real MongoDB in memory), `cd blockchain && npx hardhat test` (42, real EVM), `cd frontend && npm test` (97, jsdom). Also driven by hand in a real browser against a local chain; **not tested against real S3, Atlas, Polygon or a real wallet extension** | — |
 
 **Known limitation — what is proven.** The Tier 2 and Tier 3 results come from simulated damage to one synthetic certificate (compression, resizing, rotation, noise, a drawn perspective). That is evidence the method works, not proof it works on photographs from real phones. The confidence threshold and Tier 3 distances must be re-measured on real captures before anyone relies on them (`npm run robustness`, `npm run calibrate-tier3` in `backend/`).
 
@@ -409,7 +409,8 @@ cd backend
 npm install
 cp .env.example .env     # then fill it in — see below
 npm run dev
-npm test                 # ~270 tests; needs no cloud account
+npm test                 # needs no cloud account (a real MongoDB runs in memory)
+npm run corpus           # the forgery corpus: a verdict per file and a confusion matrix (see corpus/README.md)
 ```
 
 **Frontend** (separate terminal)

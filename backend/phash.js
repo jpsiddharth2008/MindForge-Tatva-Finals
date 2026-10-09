@@ -15,7 +15,11 @@ const LOW = 8;                        // the top-left 8 x 8 DCT coefficients (th
 const PAGE_W = 800;                   // every page is normalised to this size before gridding, so cells line up between captures
 const PAGE_H = 560;
 const GRID = 4;
-const FLAT_STDEV = 3;                 // a cell this uniform (grey levels) has no structure to hash
+// A cell whose SHRUNK picture (the 32 x 32 that is actually hashed) varies less than this has no structure to hash. Judged after
+// shrinking because sensor noise averages out there: a blank tile of a dim, noisy photo measures 6 at full size but 3 shrunk, while the
+// faintest real tile measures 14. (At full size and a limit of 3, such a tile counted as content and read as maximally different from
+// the blank tile it came from: found by the forgery corpus, sample A4.)
+const FLAT_STDEV = 8;
 const MAX_DISTANCE = 64;
 
 const THRESHOLDS_PATH = path.join(__dirname, 'config', 'tier3.json');
@@ -80,8 +84,10 @@ const toHex = (bits) => {
  * @returns {Promise<{h: string, flat: boolean}>} flat: the picture is uniform, so there is nothing to hash. Its h is all zeros.
  */
 async function phash(gray) {
-    if (stdev(gray.data) < FLAT_STDEV) return { h: '0'.repeat(16), flat: true };
+    const blank = { h: '0'.repeat(16), flat: true };
+    if (stdev(gray.data) < 1) return blank;                       // perfectly uniform: no need to shrink it to know
     const small = await resizeGray(gray, N, N);
+    if (stdev(small.data) < FLAT_STDEV) return blank;
     const coef = dct2d(Float64Array.from(small.data));
     const low = [];
     for (let v = 0; v < LOW; v++) for (let u = 0; u < LOW; u++) low.push(coef[v * N + u]);
