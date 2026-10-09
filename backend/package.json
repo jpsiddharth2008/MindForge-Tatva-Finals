@@ -11,7 +11,8 @@
     "robustness": "node scripts/robustness.js",
     "calibrate-tier3": "node scripts/calibrate-tier3.js",
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "corpus": "node scripts/run-corpus.js"
   },
   "keywords": [],
   "author": "",

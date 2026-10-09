@@ -13,7 +13,7 @@ Nothing in `phash.js` can return "approved". The strongest answer it gives is `C
 
 Every capture is first flattened, straightened, contrast-stretched and **cropped to its printed content** (`imaging.flatPage`), then
 scaled to a fixed size, so two captures of one document line up. A tile that is blank is marked *flat* instead of hashed: the hash of a
-uniform area is numerical noise.
+uniform area is numerical noise. "Blank" is judged on the shrunk 32x32 picture that is actually hashed, because sensor noise averages out there: a blank tile of a dim, noisy photo has a standard deviation of 6 at full size but 3 shrunk, while the faintest real tile has 14 (limit: 8). Judged at full size, such a tile counted as content and scored as maximally different from the clean blank tile it came from, which made a genuine low-light photo read as "unclear" (corpus sample A4).
 
 ## How it decides (`compareVisual`, thresholds in `config/tier3.json`)
 

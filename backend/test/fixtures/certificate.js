@@ -29,7 +29,21 @@ function photoBox(style = 'a') {
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${style === 'a' ? '#ddd' : '#bbb'}" stroke="black" stroke-width="2"/>${head}${body}`;
 }
 
-function svg(fields, { extra = [], photo = true, photoStyle = 'a' } = {}) {
+const DEFAULT_HEADER = ['NATIONAL INSTITUTE OF TECHNOLOGY', 'CERTIFICATE OF GRADUATION'];
+
+/** The marking every file in the forgery corpus carries (corpus/README.md). */
+const SPECIMEN_TEXT = 'SPECIMEN — NOT A VALID DOCUMENT — GENERATED FOR TESTING';
+
+/**
+ * The specimen marking: small pale print along the foot. Pale on purpose: it must stay below the "ink" level that sets the page crop and
+ * that OCR reads, or it would move the template's regions and be read as a field. (A large diagonal SPECIMEN across the page was
+ * tried: it made the OCR lose the Programme line.)
+ */
+function specimenMarks() {
+    return `<text x="${W / 2}" y="${H - 22}" text-anchor="middle" font-family="Arial" font-size="16" fill="#b0b0b0">${SPECIMEN_TEXT}</text>`;
+}
+
+function svg(fields, { extra = [], photo = true, photoStyle = 'a', header = DEFAULT_HEADER, marks = '' } = {}) {
     const p = fields.payload || {};
     const rows = [
         `Issuer: ${fields.issuer}`, `Document: ${fields.docType}`, `Name: ${fields.holder}`, `Register No: ${fields.idNumber}`,
@@ -37,11 +51,12 @@ function svg(fields, { extra = [], photo = true, photoStyle = 'a' } = {}) {
     ];
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
 <rect width="${W}" height="${H}" fill="white"/>
-<text x="${W / 2}" y="70" text-anchor="middle" font-family="Arial" font-size="38" font-weight="bold">NATIONAL INSTITUTE OF TECHNOLOGY</text>
-<text x="${W / 2}" y="125" text-anchor="middle" font-family="Arial" font-size="30">CERTIFICATE OF GRADUATION</text>
+<text x="${W / 2}" y="70" text-anchor="middle" font-family="Arial" font-size="38" font-weight="bold">${esc(header[0])}</text>
+<text x="${W / 2}" y="125" text-anchor="middle" font-family="Arial" font-size="30">${esc(header[1])}</text>
 <line x1="60" y1="150" x2="${W - 60}" y2="150" stroke="black" stroke-width="2"/>
 ${rows.map((t, i) => `<text x="60" y="${rowY(i)}" font-family="Arial" font-size="30" fill="black">${esc(t)}</text>`).join('\n')}
 ${photo ? photoBox(photoStyle) : ''}
+${marks}
 </svg>`;
 }
 
@@ -110,6 +125,6 @@ const angled = (quad) => async (png) => {
 };
 
 module.exports = {
-    DEFAULT_FIELDS, W, H, ROW, PHOTO, render, renderWithPhoto, proceduralPhoto, withFields, paintOver, sha256, svg,
+    DEFAULT_FIELDS, DEFAULT_HEADER, SPECIMEN_TEXT, specimenMarks, W, H, ROW, PHOTO, render, renderWithPhoto, proceduralPhoto, withFields, paintOver, sha256, svg,
     jpeg, shrink, noise, rotated, dim, blur, pipe, angled,
 };

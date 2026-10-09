@@ -16,7 +16,22 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 't3-'));   // config files
 const OPTIONS = { regions: { photo: TEMPLATE.photoRegion } };
 const gray = (w, h, fn) => { const data = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = fn(x, y); return { data, width: w, height: h }; };
 const seeded = (seed) => { let s = seed; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; };
-const texture = (seed, w = 200, h = 140) => { const r = seeded(seed); return gray(w, h, () => Math.floor(r() * 256)); };
+// A picture with structure at the scale the hash looks at: random values on a coarse grid, smoothly interpolated. White noise is NOT
+// used as stand-in content: shrinking averages it away, so it is not like any tile of a document.
+const texture = (seed, w = 200, h = 140) => {
+    const r = seeded(seed);
+    const gw = 12; const gh = 9;
+    const grid = Array.from({ length: (gw + 1) * (gh + 1) }, () => r() * 255);
+    return gray(w, h, (x, y) => {
+        const fx = (x / (w - 1)) * gw; const fy = (y / (h - 1)) * gh;
+        const x0 = Math.min(gw - 1, Math.floor(fx)); const y0 = Math.min(gh - 1, Math.floor(fy));
+        const tx = fx - x0; const ty = fy - y0;
+        const at = (cx, cy) => grid[cy * (gw + 1) + cx];
+        return Math.round(at(x0, y0) * (1 - tx) * (1 - ty) + at(x0 + 1, y0) * tx * (1 - ty) + at(x0, y0 + 1) * (1 - tx) * ty + at(x0 + 1, y0 + 1) * tx * ty);
+    });
+};
+// Gaussian-ish sensor noise on top of a picture, seeded.
+const noisy = (img, sigma, seed) => { const r = seeded(seed); return { ...img, data: img.data.map((v) => Math.max(0, Math.min(255, Math.round(v + sigma * (r() + r() + r() + r() - 2) * 1.73)))) }; };
 
 // ---------------------------------------------------------------- the DCT
 test('dct2d: a constant block has only the DC term; a single cosine lands on exactly one coefficient', () => {
@@ -73,6 +88,21 @@ test('a uniform picture is "flat": nothing to hash, so it is never compared on n
     const textured = await ph.phash(texture(1));
     assert.strictEqual(textured.flat, false);
     assert.strictEqual(ph.cellDistance(a, textured), ph.MAX_DISTANCE, 'blank against content is as different as it gets');
+});
+
+test('a BLANK tile stays blank under sensor noise, so a noisy photo of a clean page is not "different" tile by tile (found by corpus sample A4)', async () => {
+    const white = gray(200, 140, () => 255);
+    const clean = await ph.phash(white);
+    for (const sigma of [8, 15, 25]) {
+        const grainy = await ph.phash(noisy(gray(200, 140, () => 230), sigma, 7));
+        assert.strictEqual(grainy.flat, true, `noise sd ${sigma}`);
+        assert.strictEqual(ph.cellDistance(clean, grainy), 0, `noise sd ${sigma}: blank against grainy blank is identical`);
+    }
+});
+
+test('a faint but real picture is not mistaken for a blank tile', async () => {
+    const faint = gray(200, 140, (x, y) => 200 + Math.round(40 * Math.sin(x / 11) * Math.cos(y / 9)));   // pale pattern, sd about 14
+    assert.strictEqual((await ph.phash(faint)).flat, false);
 });
 
 test('regionGrid cuts a page into 16 tiles, each hashed on its own; tile edges line up for any page size', async () => {

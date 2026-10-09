@@ -1,0 +1,210 @@
+{
+  "about": "Ground truth for the forgery corpus. Every file is synthetic and carries a SPECIMEN marking. See README.md.",
+  "specimenText": "SPECIMEN — NOT A VALID DOCUMENT — GENERATED FOR TESTING",
+  "generatedBy": "node corpus/generate.js",
+  "baseDocument": "A1_original.png",
+  "anchoredFields": {
+    "issuer": "Testland Civil Registry",
+    "docType": "Degree Certificate",
+    "holder": "Ananya Testsubject",
+    "idNumber": "T482915TS",
+    "issuedOn": "15-06-2026",
+    "payload": {
+      "dob": "12-04-2005",
+      "programme": "B.Tech Computer Science",
+      "cgpa": "8.7"
+    }
+  },
+  "anchoredContentHash": "9a80b8ae5f38b046289b85e1217c627a263c9cf6066de876034473923e88d0a5",
+  "samples": [
+    {
+      "file": "A1_original.png",
+      "group": "genuine",
+      "derivation": "The digital master. This is the anchored document.",
+      "simulated": false,
+      "expectedVerdict": "AUTHENTIC_ORIGINAL",
+      "sha256": "d5f9fe6fab38755692d654c6b154b52d8509c7d00935c3459a513b31af813fc7",
+      "synthetic": true
+    },
+    {
+      "file": "A2_scan_300dpi.png",
+      "group": "genuine",
+      "derivation": "A1 enlarged to scanner resolution with a little blur, sensor noise and a 0.4 degree skew. SIMULATED scan.",
+      "simulated": true,
+      "expectedVerdict": "AUTHENTIC_COPY",
+      "sha256": "f65efbfeeb09c45d1908a0e9f414caab06ea30b04f942e70a97ce45dcea58d50",
+      "synthetic": true
+    },
+    {
+      "file": "A3_photo_bright.jpg",
+      "group": "genuine",
+      "derivation": "A1 seen at a mild angle on a dark table, sensor noise, JPEG 88. SIMULATED photograph.",
+      "simulated": true,
+      "expectedVerdict": "AUTHENTIC_COPY",
+      "sha256": "ae5cfe49e17307457de71a0a42a04f811e9958f12b242bc809bd4c399e6bf1fe",
+      "synthetic": true
+    },
+    {
+      "file": "A4_photo_lowlight.jpg",
+      "group": "genuine",
+      "derivation": "A1 at a steeper angle, dim, blurred, noisy, JPEG 50. SIMULATED photograph on a different (worse) camera.",
+      "simulated": true,
+      "expectedVerdict": "AUTHENTIC_COPY",
+      "sha256": "c6fbe1b6fd341552a6dce854a694ba40d350f9ff0fce6e1501534ecd66cd6f58",
+      "synthetic": true
+    },
+    {
+      "file": "A5_whatsapp.jpg",
+      "group": "genuine",
+      "derivation": "A3 shrunk and recompressed twice, the way a messaging app does. SIMULATED round trip: not a real WhatsApp transfer.",
+      "simulated": true,
+      "expectedVerdict": "AUTHENTIC_COPY",
+      "sha256": "8dd93db8eb45204bcc2383557d52cdd347182d9eed156c196dc304b463c16546",
+      "synthetic": true
+    },
+    {
+      "file": "B1_dob_digit.png",
+      "group": "tampered",
+      "severity": "L1",
+      "manipulation": "copy-move",
+      "simulated": false,
+      "derivation": "The last digit of the date of birth replaced by a copy of the \"8\" printed in the CGPA line of the same document.",
+      "tamperedFields": [
+        {
+          "field": "payload.dob",
+          "anchored": "2005-04-12",
+          "presented": "2008-04-12"
+        }
+      ],
+      "expectedVerdict": "TAMPERED_CONTENT",
+      "sha256": "0e47346e22dbb6c2ed444659951c2fcdfafdf78da2b945fbda431f2d0f2e3a8c",
+      "synthetic": true
+    },
+    {
+      "file": "B2_name_field.png",
+      "group": "tampered",
+      "severity": "L2",
+      "manipulation": "field replacement",
+      "simulated": false,
+      "derivation": "The name line painted over and re-typed in the same font.",
+      "tamperedFields": [
+        {
+          "field": "holder",
+          "anchored": "ANANYA TESTSUBJECT",
+          "presented": "BHAVYA FAKENAME"
+        }
+      ],
+      "expectedVerdict": "TAMPERED_CONTENT",
+      "sha256": "28e15f39d7d66b133e4e2e9c26a27b047b5ae22d47593770f5aaf63374eeb4b5",
+      "synthetic": true
+    },
+    {
+      "file": "B3_photo_swap.png",
+      "group": "tampered",
+      "severity": "L2",
+      "manipulation": "splicing",
+      "simulated": false,
+      "derivation": "The photo replaced by a different synthetic picture. Every printed word is untouched.",
+      "tamperedRegions": [
+        {
+          "region": "photo",
+          "grid": [
+            1,
+            3
+          ]
+        }
+      ],
+      "expectedVerdict": "TAMPERED_VISUAL",
+      "sha256": "22a9347c2cf666fac0083623bd16cac6fe47fe205b82b5267665ba20c78202b2",
+      "synthetic": true
+    },
+    {
+      "file": "B4_multi_field.png",
+      "group": "tampered",
+      "severity": "L3",
+      "manipulation": "field replacement",
+      "simulated": false,
+      "derivation": "Name, date of birth and CGPA all altered. (The ID number is left alone; see B6 for why.)",
+      "tamperedFields": [
+        {
+          "field": "holder",
+          "anchored": "ANANYA TESTSUBJECT",
+          "presented": "ROHAN FAKENAME"
+        },
+        {
+          "field": "payload.dob",
+          "anchored": "2005-04-12",
+          "presented": "2001-04-12"
+        },
+        {
+          "field": "payload.cgpa",
+          "anchored": "8.7",
+          "presented": "9.9"
+        }
+      ],
+      "expectedVerdict": "TAMPERED_CONTENT",
+      "sha256": "b2c3e73aa6df5a0fd5f072acee8073965efd8e54ee3ca628bdccd9c3a6d442ee",
+      "synthetic": true
+    },
+    {
+      "file": "B5_laundered.png",
+      "group": "tampered",
+      "severity": "L1",
+      "manipulation": "copy-move + print-scan laundering",
+      "simulated": true,
+      "derivation": "B1 passed through a stand-in for print and rescan (skew, blur, noise, JPEG 72) to wipe digital traces. SIMULATED: not a real print-scan.",
+      "tamperedFields": [
+        {
+          "field": "payload.dob",
+          "anchored": "2005-04-12",
+          "presented": "2008-04-12"
+        }
+      ],
+      "expectedVerdict": "TAMPERED_CONTENT",
+      "sha256": "098740535e73a4c006a084dec985be78402a07523eaca60856d43c7510018857",
+      "synthetic": true
+    },
+    {
+      "file": "B6_id_number.png",
+      "group": "tampered",
+      "severity": "L2",
+      "manipulation": "field replacement",
+      "simulated": false,
+      "derivation": "Only the ID number changed. The ID is how a document is matched to its record, so this reads as a document nobody registered.",
+      "expectedVerdict": "NOT_REGISTERED",
+      "note": "Deliberate design consequence, not a miss: a changed ID cannot be linked to the original, so the answer is \"not registered\", which is safe. Differs from the issue table, which expected TAMPERED_CONTENT with the ID named.",
+      "sha256": "3c395289b64655cf9afff012285a62ab97854b10cab876df5101a2566dbb0084",
+      "synthetic": true
+    },
+    {
+      "file": "C1_different_person.png",
+      "group": "negative",
+      "manipulation": "same template and the SAME photo, different person",
+      "simulated": false,
+      "derivation": "A genuinely different synthetic person on the same template with the same picture: as close in appearance as two cards can be. Must not be rescued by visual similarity.",
+      "expectedVerdict": "NOT_REGISTERED",
+      "sha256": "fb8a1ac9e321535ebdf639fa070b262a2a3fef9fe5a6497a96411d2c19388b5c",
+      "synthetic": true
+    },
+    {
+      "file": "C2_never_anchored.png",
+      "group": "negative",
+      "manipulation": "never issued",
+      "simulated": false,
+      "derivation": "A valid-looking certificate (fictional person, different photo) that was never issued through the system.",
+      "expectedVerdict": "NOT_REGISTERED",
+      "sha256": "5f0d7c08d3c7754c2aec74edab8a9a60ce263e6d25a471598a412e308ef4d721",
+      "synthetic": true
+    },
+    {
+      "file": "C3_unreadable.jpg",
+      "group": "negative",
+      "manipulation": "unreadable capture",
+      "simulated": true,
+      "derivation": "A1 heavily blurred and darkened. SIMULATED capture. Must be \"inconclusive\", not a confident verdict either way.",
+      "expectedVerdict": "INCONCLUSIVE",
+      "sha256": "391f570306802834296a69031ef12de20ec00c5eef926ccd6e39d997db72e4ff",
+      "synthetic": true
+    }
+  ]
+}
