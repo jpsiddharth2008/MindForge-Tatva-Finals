@@ -1,8 +1,8 @@
-// Run: node --test backend/forensics.test.js   (or: npm test in backend/)
+// Run: npm test in backend/
 // The seven adversarial cases from the issue, expressed as the tier signals each would produce.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const f = require('./forensics');
+const f = require('../forensics');
 
 const anchor = { issuer: 'NITC Registrar', issuedAt: '2026-01-01T00:00:00Z', txHash: '0xabc' };
 const FIELDS = { name: 'Asha Rao', dob: '2005-04-12', roll: 'B210123CS' };
