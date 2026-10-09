@@ -358,7 +358,7 @@ Status is tracked honestly so that documentation never overstates the code. ✅ 
 | Tier 2 — canonical content hash | 🟡 | OCR, flattening, label-anchored extraction, field-level diff; **one template, images only**; proven on simulated copies, **not real phones**; not yet anchored on chain. Two implementations currently exist (`backend/*.js` and `backend/src/services/`); one will be retired | #52 |
 | Tier 3 — perceptual hash + region grid | 🟡 | built, stored off-chain, advisory only; thresholds measured on **simulated** data; not used by any endpoint yet | #65 |
 | Tamper forensics / verdict engine | 🟡 | engine and verdict card built and unit-tested; the seven adversarial cases are tested as signals, not with real images; **no endpoint calls it** | #66 |
-| On-chain issuer authorisation | 🟡 | `blockchain/` contract, ABI and tests written; **not deployed**, source not verified on an explorer, frontend still uses the old contract | #62 |
+| On-chain issuer authorisation | 🟡 | `blockchain/` contract, ABI and 19 passing tests; **not deployed**, source not verified on an explorer. The old, ungated contract `0x1477…` is on **Ethereum Sepolia, not Polygon Amoy** (checked by bytecode) | #62 |
 | Revocation | 🟡 | contract function only; no API, UI or database mirror | #59 |
 | QR verification | ❌ | | #58 |
 | Officer dashboard, routing, error boundary | ❌ | | #60 |

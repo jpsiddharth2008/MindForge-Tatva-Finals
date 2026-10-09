@@ -88,3 +88,21 @@ This package deploys fresh, so the address and chain ID always agree.
 | `verify(bytes32)` | public view | Resilient path — by content hash |
 | `verifyByByteHash(bytes32)` | public view | Strict path — exact original |
 | `isIssuer` / `isAnchored` | public view | Helpers |
+
+## Which chain is the old contract on? (answered)
+
+The contract the first prototype used, `0x1477EE05dceBdb88Fbc49d6b0C2c5F5De7051ea3`, is on **Ethereum Sepolia (chain 11155111)**, not
+Polygon Amoy. Checked on 2026-10-10 with a read-only `eth_getCode`: 2,611 bytes of code on Sepolia, none on Amoy (chain 80002). Its code
+contains the selectors for `addDocument(string)` and `verifyDocument(string)` and **none** of `anchor`, `revoke`, `registerIssuer` or
+`verify(bytes32)`. So it is the old, ungated contract, and nothing in this package has been deployed anywhere yet.
+
+## Not done here (needs a funded key and an explorer API key)
+
+- Deploying `CredentialRegistry` to a public network and verifying its source on the explorer. `npm run deploy:amoy` does both when
+  `PRIVATE_KEY` and `POLYGONSCAN_API_KEY` are set; link the verified source here once it has run.
+- Registering real issuers: `scripts/register-issuer.js`.
+
+## Install note
+
+`@nomicfoundation/hardhat-toolbox` needs its peer packages installed. They are declared in `package.json` explicitly, so
+`npm install` works even where `legacy-peer-deps=true` is set globally (which skips them).
