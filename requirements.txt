@@ -4,6 +4,7 @@ numpy
 openai
 pyyaml
 pytest
+matplotlib   # experiments/plots.py only (PNG charts)
 # Dev C (ui/ only)
 # streamlit
 # rich
