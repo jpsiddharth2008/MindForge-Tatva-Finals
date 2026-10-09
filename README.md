@@ -12,6 +12,7 @@ The document itself never touches the blockchain. Only a cryptographic fingerpri
 
 - [The Problem](#the-problem)
 - [How It Works](#how-it-works)
+- [Tamper Detection](#tamper-detection)
 - [System Architecture](#system-architecture)
 - [Where Data Is Stored](#where-data-is-stored)
 - [Data Flows](#data-flows)
@@ -46,21 +47,80 @@ For these, verification is still manual, slow, and dependent on trusting whoever
 
 ## How It Works
 
-```
-Document ──► SHA-256 fingerprint ──► anchored on-chain by an authorised issuer
-                                      │
-Verifier re-computes the fingerprint ─┘
-          │
-          └─► match + authorised issuer + not revoked  ⇒  AUTHENTIC
-```
+A single hash can only answer one question. MindForge computes three, because verification and tamper-detection are different problems.
+
+| Tier | Fingerprint | Question it answers | Authority |
+|---|---|---|---|
+| **1** | SHA-256 of raw bytes | Is this the **exact original file**? | Proof |
+| **2** | Canonical content hash | Is this the **same document**? | **Primary verdict** |
+| **3** | Perceptual hash | Does it **look** consistent? | Advisory only |
+
+**Tier 1** is absolute but brittle — re-save a PDF, photograph a certificate, or forward it over WhatsApp and the bytes change, so a genuine document fails.
+
+**Tier 2** solves that. The document is OCR'd, its fields extracted and normalised, and *that record* is hashed. Pixels are discarded before hashing, so angle, lighting, phone and compression stop mattering — but altering a name or a date changes the hash deterministically, and we can name the field that moved.
+
+**Tier 3** catches what Tier 2 cannot: a substituted photograph, where the text reads identically but the appearance has changed.
+
+> **Why Tier 3 is never the authority.** Every ID of a given type shares one template. After perceptual hashing downsamples and discards high-frequency detail, a *different person's* card lands within a few bits of yours. Used as the deciding vote it would verify your friend's Aadhaar as your own. It may confirm or flag — never approve.
 
 Three properties follow from this design:
 
 | Property | Why |
 |---|---|
-| **Privacy-preserving** | No document content, no personal data on-chain. Only a hash. |
+| **Privacy-preserving** | No document content, no personal data on-chain. Only hashes. |
 | **Cheap at any size** | Verifying a 10 GB video costs the same as a 1 KB PDF — a hash is 32 bytes either way. |
 | **Independently verifiable** | A verifier queries the public chain directly. No API key, no account, no trust in us. |
+| **Resilient** | A genuine document still verifies after being scanned, photographed, or compressed. |
+
+---
+
+## Tamper Detection
+
+The verdict comes from how the three tiers **disagree**, not from any one of them.
+
+| Tier 1 | Tier 2 | Tier 3 | Verdict | Meaning |
+|:---:|:---:|:---:|---|---|
+| ✅ | ✅ | ✅ | `AUTHENTIC_ORIGINAL` | Untouched original file |
+| ❌ | ✅ | close | `AUTHENTIC_COPY` | Scan, photo or forward — content intact |
+| ❌ | ✅ | **far** | `TAMPERED_VISUAL` | Text identical, appearance changed → photo substitution |
+| ❌ | ❌ | any | `TAMPERED_CONTENT` | A field was altered — reported by name |
+| ❌ | ⚠️ | any | `INCONCLUSIVE` | OCR unreliable; a better capture is requested |
+
+Row 3 is the point of the design: **neither byte-hashing nor content-hashing alone detects a swapped photograph.** Their disagreement does.
+
+### Localising the change
+
+Whole-image comparison only says *something* changed. To say **where**, the normalised document is tiled into a 4×4 grid and each cell hashed independently:
+
+```
+┌────┬────┬────┬────┐
+│ ok │ ok │ ok │ ok │
+├────┼────┼────┼────┤
+│🔴18│ ok │ ok │ ok │   ← photo region, Hamming distance 18
+├────┼────┼────┼────┤      every other cell ≤ 4
+│ ok │ ok │ ok │ ok │
+└────┴────┴────┴────┘
+```
+
+One cell diverging while the rest stay tight indicates a **localised edit**. Uniformly elevated distance across all cells indicates benign re-capture. The grid is returned to the UI as a heatmap with the suspect region boxed.
+
+### Evidence, not a boolean
+
+```json
+{
+  "verdict": "TAMPERED_CONTENT",
+  "confidence": "HIGH",
+  "tiers": {
+    "byte":    { "match": false },
+    "content": { "match": false,
+                 "fieldDiffs": [
+                   { "field": "dob", "anchored": "2005-04-12", "presented": "2003-04-12" }
+                 ]},
+    "visual":  { "distance": 6, "regions": [[2,3,2,4],[18,3,2,3],[3,2,4,3],[2,3,3,2]] }
+  },
+  "anchor": { "issuer": "NITC Registrar", "issuedAt": "2026-10-09", "txHash": "0x8f2e…" }
+}
+```
 
 ---
 
@@ -78,8 +138,12 @@ flowchart TB
         API["Node.js + Express<br/>REST API"]
     end
 
-    subgraph svc ["Services"]
-        HASH["Hash Engine<br/>SHA-256"]
+    subgraph svc ["Verification Engine"]
+        PRE["Preprocess<br/>edge detect · deskew · normalise"]
+        T1["Tier 1 · SHA-256<br/>raw bytes"]
+        T2["Tier 2 · Content Hash<br/>OCR → fields → canonical"]
+        T3["Tier 3 · Perceptual Hash<br/>whole + 4×4 grid"]
+        VERD["Verdict Engine<br/>matrix · field diff · heatmap"]
         AUTH["Auth<br/>JWT · bcrypt"]
     end
 
@@ -97,17 +161,28 @@ flowchart TB
     PUB --> FE
     FE -->|HTTPS| API
     API --> AUTH
-    API --> HASH
+    API --> PRE
+    PRE --> T1 & T2 & T3
+    T1 & T2 & T3 --> VERD
+    VERD --> API
     API --> S3
     API --> DB
     API --> RPC
     RPC --> SC
 
+    T1 -.->|anchored| SC
+    T2 -.->|anchored| SC
+    T3 -.->|stored off-chain<br/>fuzzy values are not proofs| DB
+
     classDef store fill:#1a3a52,stroke:#4a90d9,color:#fff
     classDef trust fill:#3d2a52,stroke:#9d6ad9,color:#fff
+    classDef tier fill:#4a3015,stroke:#d9a04a,color:#fff
     class S3,DB store
     class RPC,SC trust
+    class T1,T2,T3,VERD tier
 ```
+
+**Note which tiers are anchored.** Tiers 1 and 2 are deterministic, so they go on-chain as proofs. Tier 3 is a similarity score with a tunable threshold — it lives in MongoDB, because a fuzzy value anchored in an immutable ledger would imply a certainty it does not have.
 
 **Design rule:** the backend is the only component holding secrets. The browser never sees a private key, a database URI, or a cloud credential. Public verification requires no wallet and no browser extension.
 
@@ -216,20 +291,37 @@ sequenceDiagram
 
     V->>FE: Upload suspect document (or scan QR)
     FE->>API: POST /api/verify/file
-    API->>API: Compute SHA-256 in memory
-    Note over API: File is discarded — never written to S3
+    Note over API: Everything below runs in memory.<br/>The file is never written to S3.
+
+    API->>API: Preprocess — deskew, perspective-correct
+    par Three tiers computed in parallel
+        API->>API: Tier 1 — SHA-256 of bytes
+    and
+        API->>API: Tier 2 — OCR → fields → canonical hash
+    and
+        API->>API: Tier 3 — pHash, whole image + 4×4 grid
+    end
 
     API->>BC: verify(contentHash) — read-only, no gas
     BC-->>API: exists · issuer · timestamp · revoked
+    API->>DB: Fetch anchored pHash + issuer name
 
-    alt Not found
+    API->>API: Verdict engine — apply matrix
+
+    alt Not registered
         API-->>FE: ❌ NOT REGISTERED
     else Revoked
-        API->>DB: Fetch revocation reason
-        API-->>FE: ⚠️ REVOKED
-    else Valid
-        API->>DB: Resolve issuer display name
-        API-->>FE: ✅ AUTHENTIC + issuer + date + explorer link
+        API-->>FE: ⚠️ REVOKED + reason
+    else Byte match
+        API-->>FE: ✅ AUTHENTIC — original file
+    else Content match, visual close
+        API-->>FE: ✅ AUTHENTIC — re-captured copy
+    else Content match, visual far
+        API-->>FE: 🔴 TAMPERED — visual + region heatmap
+    else Content mismatch
+        API-->>FE: 🔴 TAMPERED — field diffs named
+    else Low OCR confidence
+        API-->>FE: ⚠️ INCONCLUSIVE — request better capture
     end
 ```
 
@@ -243,7 +335,10 @@ This project is under active development. Status is tracked honestly so that doc
 
 | Capability | Status | Tracking |
 |---|---|---|
-| SHA-256 hashing | ✅ Working | — |
+| Tier 1 — byte hash (SHA-256) | ✅ Working | — |
+| Tier 2 — canonical content hash | ❌ Not built | #52 |
+| Tier 3 — perceptual hash + region grid | ❌ Not built | #65 |
+| Tamper forensics / verdict engine | ❌ Not built | #66 |
 | S3 upload | 🟡 Works; needs content-addressed keys + SSE | #51 |
 | Blockchain anchor + read | 🟡 Works; needs server-side signing | #50 |
 | Verification flow | 🟡 Works; must stop persisting suspect files | #50 |
@@ -256,7 +351,9 @@ This project is under active development. Status is tracked honestly so that doc
 | Contract source in repo | ❌ Missing | #62 |
 | Tests | ❌ None | #63 |
 
-**Known limitation.** The current build hashes raw file bytes, so any re-encoding — WhatsApp compression, re-saving a PDF, scanning a printout — changes the hash and produces a false negative. Canonical content hashing (#52) addresses this by hashing normalised extracted fields instead of bytes.
+**Known limitation.** The current build implements Tier 1 only, so any re-encoding — WhatsApp compression, re-saving a PDF, photographing a printout — produces a false negative on a genuine document. Tiers 2 and 3 (#52, #65) and the verdict engine (#66) address this.
+
+**Known limitation — perceptual hashing.** Documents sharing a template produce similar perceptual hashes regardless of holder. Measured distance distributions for "same document re-captured" and "different document, same template" overlap. This is why Tier 3 is advisory only and can never approve a document on its own.
 
 ---
 

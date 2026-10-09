@@ -1,2 +1,25 @@
 node_modules/
+
+# environment — every variant
 .env
+.env.*
+env
+*.env
+**/.env
+**/env
+!.env.example
+!**/.env.example
+
+# build output
+dist/
+build/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
