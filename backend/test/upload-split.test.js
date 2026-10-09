@@ -27,7 +27,7 @@ test('verifying many files, including a forged copy with the same name, writes n
     const s3 = fakeS3();
     const api = await start(s3);
     try {
-        for (const body of [FILE, Buffer.from('%PDF-1.4 FORGED deed'), Buffer.alloc(0x4000, 7)]) {
+        for (const body of [FILE, Buffer.from('%PDF-1.4 FORGED deed'), Buffer.concat([Buffer.from('%PDF-1.5 '), Buffer.alloc(0x4000, 7)])]) {
             const res = await post(`${api.url}/api/hash`, body, 'deed.pdf');
             assert.strictEqual(res.status, 200);
         }

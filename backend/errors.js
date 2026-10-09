@@ -45,7 +45,8 @@ function errorHandler(logger) {
         if (res.headersSent) return;
         res.status(status).json({
             success: false,
-            error: status >= 500 ? 'Internal server error.' : (GENERIC[status] || 'Request could not be processed.'),
+            // publicMessage is only ever set by our own code on errors written to be shown to clients (UploadError)
+            error: status >= 500 ? 'Internal server error.' : ((err && err.publicMessage) || GENERIC[status] || 'Request could not be processed.'),
             requestId: req.id,
         });
     };

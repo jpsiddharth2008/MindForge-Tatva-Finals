@@ -1,11 +1,11 @@
 const express = require('express');
-const multer = require('multer');
 const crypto = require('crypto');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { createAuth } = require('./auth');
 const { createLogger } = require('./logger');
 const { requestContext, errorHandler } = require('./errors');
 const helmet = require('helmet');
+const { singleFileUpload } = require('./uploads');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
 
@@ -26,6 +26,7 @@ function createApp({
     rateLimits = DEFAULT_LIMITS,
     health = {},                               // extra or replacement health checks: name -> async () => 'ok' | 'not_configured'
     trustProxy = false,                        // set to the proxy hop count when running behind a load balancer
+    maxFileSizeMb,                             // upload size limit; defaults to MAX_FILE_SIZE_MB or 10
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -40,12 +41,12 @@ function createApp({
     const fileLimit = limiter({ ...DEFAULT_LIMITS.files, ...rateLimits.files });
     const loginLimit = limiter({ ...DEFAULT_LIMITS.login, ...rateLimits.login });
 
-    // File Handling
-    const upload = multer({ storage: multer.memoryStorage() });
+    // File handling: size limit, type allowlist, magic-byte check and a sanitised name (see uploads.js)
+    const uploadFile = singleFileUpload({ maxFileSizeMb });
 
     // --- ROUTE: Hash only (verification) ---
     // The suspect file never leaves this request: no S3 write, no disk write.
-    app.post('/api/hash', fileLimit, upload.single('file'), (req, res) => {
+    app.post('/api/hash', fileLimit, ...uploadFile, (req, res) => {
         const file = req.file;
         if (!file) return res.status(400).send("No file.");
         res.json({ success: true, hash: sha256(file.buffer) });
@@ -61,7 +62,7 @@ function createApp({
 
     // --- ROUTE: Hash & store (issuance) ---
     // Issuers only: requires a valid bearer token.
-    app.post('/api/anchor', fileLimit, auth.requireAuth, upload.single('file'), async (req, res, next) => {
+    app.post('/api/anchor', fileLimit, auth.requireAuth, ...uploadFile, async (req, res, next) => {
         try {
             const file = req.file;
             if (!file) return res.status(400).send("No file.");
@@ -72,15 +73,15 @@ function createApp({
             // 2. Upload to AWS S3
             const params = {
                 Bucket: bucketName,
-                Key: file.originalname, // File name in S3 (content-addressed keys: #51)
+                Key: file.safeName, // sanitised name; content-addressed keys come with #51
                 Body: file.buffer,
-                ContentType: file.mimetype,
+                ContentType: file.detectedMime,   // from the bytes, not the client's header
             };
 
             await s3.send(new PutObjectCommand(params));
 
             // 3. Send Hash & URL back to Frontend
-            const fileUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${file.originalname}`;
+            const fileUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${encodeURIComponent(file.safeName)}`;
 
             res.json({
                 success: true,
