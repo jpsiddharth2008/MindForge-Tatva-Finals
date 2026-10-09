@@ -23,3 +23,6 @@ npm-debug.log*
 .DS_Store
 .vscode/
 .idea/
+
+# Tesseract language models — downloaded at runtime, not source
+*.traineddata

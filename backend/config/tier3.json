@@ -4,7 +4,7 @@
   "wholeFar": 8,
   "maxLocalisedCells": 2,
   "calibration": {
-    "measuredOn": "2026-10-09",
+    "measuredOn": "2026-10-10, sharp 0.35.5",
     "how": "npm run calibrate-tier3",
     "data": "SIMULATED captures of one synthetic certificate with procedural photos. Not real phones, not real cards, not real forgeries.",
     "reCaptures": 16,
@@ -13,9 +13,9 @@
     "reCaptureWholePageLargest": 2,
     "otherPhotos": 6,
     "otherPhotoTileRange": "12 to 22",
-    "otherPhotoRegionRange": "26 to 34",
+    "otherPhotoRegionRange": "24 to 34",
     "otherPhotoWholePageRange": "2 to 6",
-    "margins": "cellFar 12 sits 4 above the largest re-capture tile; regionFar 16 sits 10 above the largest re-capture photo region and 10 below the smallest swap",
+    "margins": "cellFar 12 sits 4 above the largest re-capture tile; regionFar 16 sits 10 above the largest re-capture photo region and 8 below the smallest swap",
     "wholeFarNote": "reported but never used to decide anything: the whole-page hash cannot see a photo swap (2 to 6, the same as ordinary captures)",
     "knownBlindSpots": "A different person's card on the same template, and edits to printed text (date of birth, CGPA), are INVISIBLE to a perceptual hash (largest tile 12 and 0). Tier 3 cannot approve or reject on its own. That is why it is advisory.",
     "mustRedo": "Re-run on a sample of real captures and real forgeries before relying on these numbers."

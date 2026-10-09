@@ -9,7 +9,9 @@
     "check-bucket": "node scripts/check-bucket.js",
     "reconcile": "node scripts/reconcile.js",
     "robustness": "node scripts/robustness.js",
-    "calibrate-tier3": "node scripts/calibrate-tier3.js"
+    "calibrate-tier3": "node scripts/calibrate-tier3.js",
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +23,7 @@
     "cors": "^2.8.6",
     "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
+    "ethers": "^6.16.0",
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.1",
     "file-type": "^16.5.4",
@@ -28,8 +31,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.24.5",
     "multer": "^2.0.2",
-    "sharp": "^0.33.5",
-    "tesseract.js": "^5.1.1",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0",
     "winston": "^3.19.0"
   },
   "devDependencies": {

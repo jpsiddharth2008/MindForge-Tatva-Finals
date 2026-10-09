@@ -26,9 +26,11 @@ function recognize(png) {
     // one job at a time on the shared worker; a failed job must not block the next one
     const job = queue.then(async () => {
         const worker = await getWorker();
-        const { data } = await worker.recognize(png);
+        // tesseract.js 6+ returns only plain text unless the layout is asked for; the lines hang off blocks -> paragraphs -> lines
+        const { data } = await worker.recognize(png, {}, { blocks: true });
+        const lines = (data.blocks || []).flatMap((b) => b.paragraphs || []).flatMap((p) => p.lines || []);
         return {
-            lines: (data.lines || []).map((l) => ({
+            lines: lines.map((l) => ({
                 text: l.text.replace(/\s+$/, ''),
                 confidence: l.confidence,
                 words: (l.words || []).map((w) => ({ text: w.text, confidence: w.confidence })),

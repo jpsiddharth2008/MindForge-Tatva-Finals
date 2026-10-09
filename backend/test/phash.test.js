@@ -260,7 +260,7 @@ test('EVIDENCE: at the committed thresholds every one of 16 simulated re-capture
     assert.deepStrictEqual(result.swaps, { REVIEW: 6 });
     assert.strictEqual(Math.max(...m.recaptures.flatMap((r) => r.cells.flat())) <= T.calibration.reCaptureLargestTile, true, 'the config\'s recorded numbers are not stale');
     assert.strictEqual(Math.max(...m.recaptures.map((r) => r.regionDistances.photo)) <= T.calibration.reCapturePhotoRegionLargest, true);
-    assert.ok(Math.min(...m.swaps.map((r) => r.regionDistances.photo)) >= 26, 'the smallest swap distance the config records');
+    assert.ok(Math.min(...m.swaps.map((r) => r.regionDistances.photo)) >= 24, 'the smallest swap distance the config records');
 });
 
 after(() => { /* nothing to clean: sharp and the DCT hold no handles */ });

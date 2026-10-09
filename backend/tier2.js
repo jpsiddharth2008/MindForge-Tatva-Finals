@@ -5,9 +5,10 @@ const { extractFields, MIN_CONFIDENCE, TEMPLATE } = require('./extract');
 const { contentHash, FieldError, diffRecords, lookupKey } = require('./content-hash');
 
 // To call a document TAMPERED, every field that differs must have been read at least this confidently.
-// Calibrated on 273 field reads across 44 degraded copies of the test certificate (noise, blur, JPEG, shrinking, tone, angle):
-// all 247 reads at confidence 90 or above were correct, while the 11 wrong reads topped out at 85.6. A measured margin on
-// synthetic data, not a guarantee: re-run the calibration when the template or the OCR settings change.
+// Calibrated on degraded copies of the test certificate (noise, blur, JPEG, shrinking, tone, angle), 44 copies, re-measured on
+// tesseract.js 7: all 249 reads at confidence 90 or above were correct, while the 7 wrong reads topped out at 87 (a margin of
+// only 3; on tesseract.js 5 it was 4). A measured margin on synthetic data, not a guarantee: re-run the calibration whenever the
+// template, the OCR engine version or its settings change.
 const MISMATCH_CONFIDENCE = 90;
 
 /**
