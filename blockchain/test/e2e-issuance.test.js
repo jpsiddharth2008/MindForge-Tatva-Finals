@@ -163,4 +163,52 @@ describe("issue, anchor, confirm and revoke on a real chain", function () {
     expect(reverted).to.equal(true);
     expect((await chain.verify(up.contentHash)).revoked).to.equal(false);
   });
+
+  describe("public verification reads the registry itself", () => {
+    const verify = async (bytes, extra = {}) => {
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: "application/pdf" }), "d.pdf");
+      for (const [k, v] of Object.entries(extra)) form.append(k, v);
+      const res = await fetch(`${url}/api/verify`, { method: "POST", body: form });   // no login: the public
+      return { status: res.status, body: await res.json() };
+    };
+
+    it("authentic while registered; REVOKED, with the chain's reason and block time, after the issuer revokes on chain", async () => {
+      const bytes = Buffer.from("%PDF-1.4 e2e document number 100");
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: "application/pdf" }), "d.pdf");
+      form.append("fields", JSON.stringify(FIELDS(100)));
+      const up = await (await fetch(`${url}/api/anchor`, { method: "POST", body: form, headers: { Authorization: `Bearer ${token}` } })).json();
+
+      // stored but not anchored: the registry has never heard of it
+      expect((await verify(bytes)).body.verdict).to.equal("NOT_REGISTERED");
+
+      const anchorTx = await registry.connect(issuer).anchor("0x" + up.contentHash, "0x" + up.hash);
+      await anchorTx.wait();
+      const id = up.document.documentId;
+      await api("POST", `/api/documents/${id}/chain-pending`, { transactionHash: anchorTx.hash });
+      await api("POST", `/api/documents/${id}/chain-confirmed`, { transactionHash: anchorTx.hash });
+
+      const good = await verify(bytes);
+      expect(good.body.verdict).to.equal("AUTHENTIC_ORIGINAL");
+      expect(good.body.chainChecked).to.equal(true);
+      expect(good.body.anchor.issuer).to.equal("Testland Registrar");
+      expect((await verify(bytes, { qr: JSON.stringify({ v: 1, contentHash: up.contentHash, chainId: 31337, contractAddress: address }) })).body.qr.matches).to.equal(true);
+
+      const revokeTx = await registry.connect(issuer).revoke("0x" + up.contentHash, "Degree withdrawn after inquiry");
+      const receipt = await revokeTx.wait();
+      const block = await ethers.provider.getBlock(receipt.blockNumber);
+
+      // the DATABASE has not been told yet (still ISSUED): the chain alone makes verification say REVOKED
+      expect((await (await api("GET", `/api/documents/${id}`)).json()).document.status).to.equal("ISSUED");
+      const revoked = await verify(bytes);
+      expect(revoked.body.verdict).to.equal("REVOKED");
+      expect(revoked.body.revocation.reason).to.equal("Degree withdrawn after inquiry");
+      expect(new Date(revoked.body.revocation.at).getTime()).to.equal(Number(block.timestamp) * 1000);
+    });
+
+    it("an unknown file is NOT_REGISTERED on the real registry", async () => {
+      expect((await verify(Buffer.from("%PDF-1.4 nobody ever issued this"))).body.verdict).to.equal("NOT_REGISTERED");
+    });
+  });
 });

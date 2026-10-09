@@ -38,6 +38,7 @@ function limiter({ windowMs, limit }) {
 const DEFAULT_LIMITS = {
     files: { windowMs: 60 * 1000, limit: 30 },        // /api/hash and /api/anchor: hashing is CPU-bound
     login: { windowMs: 15 * 60 * 1000, limit: 10 },   // slows password guessing
+    verify: { windowMs: 60 * 1000, limit: 10 },       // public verification runs OCR and image analysis: far heavier than hashing
 };
 
 /** Stops accepting connections on SIGTERM/SIGINT, lets in-flight requests finish, and exits (forced after a timeout). */

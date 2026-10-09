@@ -11,6 +11,9 @@ const { createIssuance } = require('./issuance');
 const { createChain } = require('./chain');
 const { analyseImage, compareToAnchor } = require('./tier2');
 const { analyseVisual } = require('./phash');
+const { createVerification } = require('./verification');
+const { buildQrPayload } = require('./qr');
+const { STATUSES } = require('./documents');
 const { TEMPLATE } = require('./extract');
 const { contentHash: computeContentHash, lookupKey: computeLookupKey, FieldError } = require('./content-hash');
 const { ACTIONS, OUTCOMES } = require('./audit');
@@ -60,6 +63,8 @@ function createApp({
     const storage = createStorage({ s3, bucketName, sse, presignTtlSeconds, presign });
     // Auditing is best effort: audit.record() swallows its own errors, and with no audit configured this does nothing.
     const record = (req, event) => (audit ? audit.record({ ip: req.ip, ...event }) : Promise.resolve(false));
+    const verification = documents ? createVerification({ documents, chain, analyse, visualise, chainId, contractAddress }) : null;
+    const verifyLimit = limiter({ ...DEFAULT_LIMITS.verify, ...rateLimits.verify });
     const issuance = documents ? createIssuance({ documents, storage, chain, chainId, contractAddress, ...issuanceOptions }) : null;
     const fileLimit = limiter({ ...DEFAULT_LIMITS.files, ...rateLimits.files });
     const loginLimit = limiter({ ...DEFAULT_LIMITS.login, ...rateLimits.login });
@@ -192,6 +197,29 @@ function createApp({
         }
     });
 
+    // --- ROUTE: public verification ---
+    // Upload a document (and optionally the text of its QR code) and learn whether it is the one an authorised issuer registered,
+    // and whether it has been altered. Everything runs in memory: the file is never stored. Signed-in issuers get the true values
+    // of any field that differs; the public is told only WHICH field differs.
+    const VERIFY_AUDIT = {
+        AUTHENTIC_ORIGINAL: ['SUCCESS', 'MATCH'], AUTHENTIC_COPY: ['SUCCESS', 'MATCH'], NOT_REGISTERED: ['FAILED', 'NO_MATCH'],
+        REVOKED: ['FAILED', 'REVOKED'], TAMPERED_CONTENT: ['FAILED', 'TAMPERED_CONTENT'], TAMPERED_VISUAL: ['FAILED', 'TAMPERED_VISUAL'],
+        INCONCLUSIVE: ['FAILED', 'INCONCLUSIVE'], QR_MISMATCH: ['FAILED', 'QR_MISMATCH'],
+    };
+    app.post('/api/verify', verifyLimit, auth.optionalAuth, ...uploadFile, async (req, res, next) => {
+        try {
+            if (!verification) return res.status(503).json({ success: false, error: 'Verification is not available.', requestId: req.id });
+            const file = req.file;
+            if (!file) return res.status(400).json({ success: false, error: 'No file.', requestId: req.id });
+            const { documentId, ...result } = await verification.verifyDocument({
+                buffer: file.buffer, mime: file.detectedMime, qrRaw: (req.body || {}).qr, issuerView: !!req.user,
+            });
+            const [outcome, reason] = VERIFY_AUDIT[result.verdict] || ['FAILED', 'INCONCLUSIVE'];
+            await record(req, { action: 'VERIFY', outcome, reason, documentId });
+            res.json({ success: true, ...result });
+        } catch (err) { next(err); }
+    });
+
     // --- ROUTES: look up an issued document (issuers only) ---
     // Specific routes first so "by-hash" is not read as a document id. Parameters are format-checked before any query.
     const lookup = (pattern, find) => async (req, res, next) => {
@@ -204,6 +232,24 @@ function createApp({
             res.json({ success: true, document: publicView(doc) });
         } catch (err) { next(err); }
     };
+    // Your documents, newest first, a page at a time, with a count per status for the dashboard.
+    app.get('/api/documents', auth.requireAuth, async (req, res, next) => {
+        try {
+            if (!documents) return res.status(503).json({ success: false, error: 'Document records are not available.', requestId: req.id });
+            const { status, cursor } = req.query;
+            const limit = req.query.limit === undefined ? 20 : Number(req.query.limit);
+            const bad = Object.keys(req.query).some((k) => !['status', 'limit', 'cursor'].includes(k))
+                || (status !== undefined && !STATUSES.includes(status)) || !Number.isInteger(limit) || limit < 1 || limit > 50
+                || (cursor !== undefined && !/^[0-9a-f]{24}$/.test(String(cursor)));
+            if (bad) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            const rows = await documents.listByIssuer(req.user.sub, { status, limit: limit + 1, cursor });
+            const page = rows.slice(0, limit);
+            res.json({
+                success: true, documents: page.map(publicView), counts: await documents.countByStatus(req.user.sub),
+                nextCursor: rows.length > limit ? String(page[page.length - 1]._id) : null,
+            });
+        } catch (err) { next(err); }
+    });
     app.get('/api/documents/by-hash/:value', auth.requireAuth, lookup(/^[a-f0-9]{64}$/, (v) => documents.findBySha256(v)));
     app.get('/api/documents/by-tx/:value', auth.requireAuth, lookup(/^0x[a-fA-F0-9]{64}$/, (v) => documents.findByTransactionHash(v)));
     app.get('/api/documents/:value', auth.requireAuth, lookup(/^[0-9a-f-]{36}$/, (v) => documents.findByDocumentId(v)));
@@ -235,6 +281,19 @@ function createApp({
         await record(req, { action: 'ISSUE', outcome: 'FAILED', reason: doc.failureReason, actorName: req.user.sub, documentId: doc.documentId });
         return { success: true, document: publicView(doc) };
     }));
+
+    // The text to encode in this document's QR code: pointers only (content hash, chain, contract), never personal data.
+    app.get('/api/documents/:id/qr', auth.requireAuth, async (req, res, next) => {
+        try {
+            if (!documents) return res.status(503).json({ success: false, error: 'Document records are not available.', requestId: req.id });
+            if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            const doc = await documents.findByDocumentId(req.params.id);
+            if (!doc || doc.issuerName !== req.user.sub) return next(Object.assign(new Error('not found'), { status: 404 }));
+            if (doc.status !== 'ISSUED' || !doc.contentHash) return next(Object.assign(new Error('not issued'), { status: 409, publicMessage: 'Only an issued document with a content hash has a QR code.' }));
+            if (!chainId || !contractAddress) return res.status(503).json({ success: false, error: 'The chain and contract are not configured.', requestId: req.id });
+            res.json({ success: true, payload: buildQrPayload({ contentHash: doc.contentHash, chainId, contractAddress }) });
+        } catch (err) { next(err); }
+    });
 
     // The issuer's wallet revoked a document on chain: ask the server to check it and mirror it (ISSUED -> REVOKED)
     app.post('/api/documents/:id/revoke', auth.requireAuth, chainStep(async (req) => {

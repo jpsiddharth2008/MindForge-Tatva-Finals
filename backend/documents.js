@@ -149,6 +149,23 @@ function createDocuments(Document) {
             return lean(Document.find({ status: { $in: statuses }, updatedAt: { $lt: new Date(now - olderThanMs) } }).sort({ updatedAt: 1 }));
         },
 
+        /**
+         * One issuer's documents, newest first, a page at a time. `cursor` is the opaque id of the last item of the previous page.
+         * (Paging on the unique, increasing _id, not on a timestamp: two documents created in the same millisecond must not be skipped.)
+         */
+        listByIssuer(issuerName, { status, limit = 20, cursor } = {}) {
+            const q = { issuerName: String(issuerName) };
+            if (status) q.status = String(status);
+            if (cursor) q._id = { $lt: new mongoose.Types.ObjectId(String(cursor)) };
+            return lean(Document.find(q).sort({ _id: -1 }).limit(limit));
+        },
+
+        /** How many of one issuer's documents are in each status, e.g. { ISSUED: 12, FAILED: 1 }. */
+        async countByStatus(issuerName) {
+            const rows = await Document.aggregate([{ $match: { issuerName: String(issuerName) } }, { $group: { _id: '$status', n: { $sum: 1 } } }]);
+            return Object.fromEntries(rows.map((r) => [r._id, r.n]));
+        },
+
         /** Attaches the on-chain transaction to a record so it can be found by transaction hash. */
         async recordTransaction(documentId, { transactionHash, blockNumber, chainId, contractAddress }) {
             return lean(Document.findOneAndUpdate(

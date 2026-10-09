@@ -114,3 +114,41 @@ test('hammingHex and compareGrids', () => {
   assert.deepEqual(f.compareGrids([['00', 'ff'], ['0f', 'f0']], [['01', 'ff'], ['00', 'f0']]), [[1, 0], [4, 0]]);
   assert.throws(() => f.compareGrids([['00']], [['00'], ['00']]));
 });
+
+// ---- Tier 3's own advice (phash.js) when it is supplied: the engine defers to it, and it can never approve on its own
+const withAdvice = (advice, over = {}) => base({ visual: { advice, distance: 2, cellDistances: calm, divergedCells: [], changedRegions: [], ...over } });
+
+test('visual advice REVIEW with matching text is TAMPERED_VISUAL (MEDIUM), naming the diverged tiles and regions it was given', () => {
+    const r = f.verify(withAdvice('REVIEW', { divergedCells: [[1, 3]], changedRegions: ['photo'] }));
+    assert.strictEqual(r.verdict, 'TAMPERED_VISUAL');
+    assert.strictEqual(r.confidence, 'MEDIUM');
+    assert.deepStrictEqual(r.tiers.visual.divergedCells, [[1, 3]]);
+    assert.deepStrictEqual(r.tiers.visual.changedRegions, ['photo']);
+    assert.strictEqual(r.tiers.visual.advice, 'REVIEW');
+});
+
+test('visual advice UNCLEAR with matching text is INCONCLUSIVE: a disturbed picture is never read as "just a copy"', () => {
+    assert.strictEqual(f.verify(withAdvice('UNCLEAR')).verdict, 'INCONCLUSIVE');
+});
+
+test('visual advice CONSISTENT is AUTHENTIC_COPY only because the text already matched', () => {
+    assert.strictEqual(f.verify(withAdvice('CONSISTENT')).verdict, 'AUTHENTIC_COPY');
+});
+
+test('Tier 3 can never approve alone: consistent looks plus changed text is TAMPERED_CONTENT, and plus unreadable text is INCONCLUSIVE', () => {
+    const changed = withAdvice('CONSISTENT');
+    changed.content = { anchored: FIELDS, presented: { ...FIELDS, dob: '2003-04-12' }, ocrConfidence: 0.97 };
+    assert.strictEqual(f.verify(changed).verdict, 'TAMPERED_CONTENT');
+    const unreadable = withAdvice('CONSISTENT');
+    unreadable.content = { anchored: FIELDS, presented: {}, ocrConfidence: 0.1 };
+    assert.strictEqual(f.verify(unreadable).verdict, 'INCONCLUSIVE');
+    const unregistered = withAdvice('CONSISTENT');
+    unregistered.registered = false;
+    assert.strictEqual(f.verify(unregistered).verdict, 'NOT_REGISTERED');
+});
+
+test('without advice the engine still uses its own thresholds (older callers are unaffected)', () => {
+    const cells = calm.map((row) => [...row]);
+    cells[1][0] = 18;
+    assert.strictEqual(f.verify(base({ visual: { distance: 6, cellDistances: cells } })).verdict, 'TAMPERED_VISUAL');
+});
