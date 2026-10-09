@@ -252,11 +252,12 @@ test('unusable input is an error, not a hash: broken bytes throw; a 1-pixel imag
     assert.strictEqual(r.grid.length, 4);
 });
 
-test('EVIDENCE: at the committed thresholds every one of 16 simulated re-captures is CONSISTENT and every one of 6 other photos is REVIEW', async (t) => {
+test('EVIDENCE: at the committed thresholds every simulated re-capture is CONSISTENT and every one of 6 other photos is REVIEW', async (t) => {
     const m = await measure();
     const result = classify(m, T);
     t.diagnostic(JSON.stringify(result));
-    assert.deepStrictEqual(result.recaptures, { CONSISTENT: 16 });
+    assert.strictEqual(m.recaptures.length, T.calibration.reCaptures, 'the config records how many re-captures were measured');
+    assert.deepStrictEqual(result.recaptures, { CONSISTENT: m.recaptures.length });
     assert.deepStrictEqual(result.swaps, { REVIEW: 6 });
     assert.strictEqual(Math.max(...m.recaptures.flatMap((r) => r.cells.flat())) <= T.calibration.reCaptureLargestTile, true, 'the config\'s recorded numbers are not stale');
     assert.strictEqual(Math.max(...m.recaptures.map((r) => r.regionDistances.photo)) <= T.calibration.reCapturePhotoRegionLargest, true);

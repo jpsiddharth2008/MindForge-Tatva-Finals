@@ -16,7 +16,9 @@ const RECAPTURES = [
     ['JPEG q85', c.jpeg(85)], ['JPEG q60', c.jpeg(60)], ['JPEG q30', c.jpeg(30)], ['resize 75%', c.shrink(0.75)], ['resize 50%', c.shrink(0.5)],
     ['greyscale', async (p) => sharp(p).toColourspace('b-w').png({ palette: false }).toBuffer()],
     ['WhatsApp-style', c.pipe(c.shrink(0.6), c.jpeg(65))], ['rotated +2', c.rotated(2)], ['rotated -4', c.rotated(-4)],
-    ['dim x0.6', c.dim(0.6, 0)], ['washed x0.55+90', c.dim(0.55, 90)], ['blur 1', c.blur(1)], ['noise 10', c.noise(10)],
+    ['dim x0.6', c.dim(0.6, 0)], ['washed x0.55+90', c.dim(0.55, 90)], ['blur 1', c.blur(1)],
+    ...[1, 2, 3, 4, 5, 6].map((seed) => [`noise 10 (seed ${seed})`, c.noise(10, seed)]),     // seeded: the same pixels every run, and several samples to see the spread
+    ['noise 15 (seed 1)', c.noise(15, 1)],
     ['angled mild', c.angled([[160, 110], [1000, 170], [950, 800], [110, 740]])],
     ['angled strong', c.angled([[220, 90], [1080, 240], [980, 810], [120, 700]])],
     ['angled + blur + noise + q50', c.pipe(c.angled([[170, 120], [1020, 150], [930, 790], [130, 730]]), c.blur(0.8), c.noise(15), c.jpeg(50))],

@@ -82,9 +82,22 @@ async function renderWithPhoto(seed, fields = DEFAULT_FIELDS, options = {}) {
 // ---- ways a picture of the certificate gets damaged -------------------------------------------------
 const jpeg = (q) => async (png) => sharp(png).jpeg({ quality: q, chromaSubsampling: '4:2:0' }).toBuffer();
 const shrink = (f) => async (png) => sharp(png).resize(Math.round(W * f)).png().toBuffer();
-const noise = (sigma) => async (png) => sharp(png).composite([{
-    input: { create: { width: W, height: H, channels: 3, noise: { type: 'gaussian', mean: 128, sigma } } }, blend: 'overlay',
-}]).png().toBuffer();
+/**
+ * Gaussian sensor noise, overlaid on the picture. SEEDED: the same (sigma, seed) always gives the same pixels, so a test that uses
+ * it cannot pass on one run and fail on the next. (sharp's own noise generator is random on every call.) Sized to the actual image.
+ */
+const noise = (sigma, seed = 1) => async (png) => {
+    const { width, height } = await sharp(png).metadata();
+    let state = seed >>> 0 || 1;
+    const rnd = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return (state + 1) / 4294967297; };   // uniform in (0, 1)
+    const raw = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < raw.length; i += 2) {                                    // Box-Muller makes two normals per pair of uniforms
+        const r = Math.sqrt(-2 * Math.log(rnd())); const t = 2 * Math.PI * rnd();
+        raw[i] = Math.max(0, Math.min(255, Math.round(128 + sigma * r * Math.cos(t))));
+        if (i + 1 < raw.length) raw[i + 1] = Math.max(0, Math.min(255, Math.round(128 + sigma * r * Math.sin(t))));
+    }
+    return sharp(png).composite([{ input: raw, raw: { width, height, channels: 3 }, blend: 'overlay' }]).png().toBuffer();
+};
 const rotated = (deg) => async (png) => sharp(png).rotate(deg, { background: '#ffffff' }).png().toBuffer();
 const dim = (a, b) => async (png) => sharp(png).linear(a, b).png().toBuffer();
 const blur = (sigma) => async (png) => sharp(png).blur(sigma).png().toBuffer();

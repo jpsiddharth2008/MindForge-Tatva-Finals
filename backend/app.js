@@ -41,7 +41,7 @@ function createApp({
     documents,                                 // document records (documents.js). Without it, nothing is recorded.
     chainId,                                   // recorded on each document
     contractAddress,
-    chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL }) : null,   // read-only chain access; confirms transactions
+    chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL, chainId, contractAddress }) : null,   // read-only chain access; confirms transactions
     issuanceOptions = {},                      // staleMs / stuckMs / now, for tests
     audit,                                     // audit trail (audit.js). Without it, events are not recorded.
     analyse = analyseImage,                    // reads a document image (Tier 2); replaced in tests
@@ -234,6 +234,14 @@ function createApp({
         const doc = await issuance.markChainFailed(req.params.id, req.user.sub, (req.body || {}).reason);
         await record(req, { action: 'ISSUE', outcome: 'FAILED', reason: doc.failureReason, actorName: req.user.sub, documentId: doc.documentId });
         return { success: true, document: publicView(doc) };
+    }));
+
+    // The issuer's wallet revoked a document on chain: ask the server to check it and mirror it (ISSUED -> REVOKED)
+    app.post('/api/documents/:id/revoke', auth.requireAuth, chainStep(async (req) => {
+        const r = await issuance.confirmRevocation(req.params.id, req.user.sub, (req.body || {}).transactionHash);
+        if (r.state === 'revoked') await record(req, { action: 'REVOKE', outcome: 'SUCCESS', actorName: req.user.sub, documentId: r.document.documentId });
+        if (r.state === 'failed') await record(req, { action: 'REVOKE', outcome: 'FAILED', reason: 'CHAIN_REVERTED', actorName: req.user.sub, documentId: r.document.documentId });
+        return { success: true, state: r.state, document: publicView(r.document) };
     }));
 
     // --- ROUTES: the audit trail (issuers only) ---

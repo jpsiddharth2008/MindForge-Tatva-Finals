@@ -26,6 +26,9 @@ class IssuanceError extends Error {
 function createIssuance({
     documents, storage, chain = null, contractAddress, chainId,
     staleMs = STALE_PENDING_MS, stuckMs = STUCK_MS, now = Date.now,
+    // Strict anchoring: the transaction must have anchored THIS document's two hashes and the registry must now hold them.
+    // On by default whenever the chain layer can read calldata (it always can in production; very old test fakes cannot).
+    verifyAnchorData = !!(chain && typeof chain.getAnchorCall === 'function'),
 }) {
     const sameAddress = (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
 
@@ -109,6 +112,10 @@ function createIssuance({
         const tx = checkTx(transactionHash);
         const doc = await ownedDocument(documentId, issuerName);
         if (['BLOCKCHAIN_PENDING', 'ISSUED'].includes(doc.status) && doc.transactionHash === tx) return doc;   // idempotent
+        if (verifyAnchorData && !doc.contentHash) {
+            // the registry is keyed by the content hash: without one there is nothing it could hold for this document
+            throw new IssuanceError(409, 'This document has no content hash, so it cannot be anchored. Upload it again together with its details.');
+        }
         let moved;
         try {
             moved = await documents.transition(documentId, ['STORED'], 'BLOCKCHAIN_PENDING', { transactionHash: tx, chainId, contractAddress });
@@ -118,6 +125,19 @@ function createIssuance({
         }
         if (!moved) throw new IssuanceError(409, 'This document is not in a state that can be anchored.');
         return moved;
+    }
+
+    /**
+     * Did the transaction really anchor THIS document? Its calldata must carry this document's content hash and byte hash, and
+     * the registry must now hold that content hash with the same byte hash, issued by the wallet that sent the transaction.
+     * A successful transaction that anchored something else (or nothing) is not an issuance.
+     */
+    async function anchoredCorrectly(doc) {
+        if (!doc.contentHash) return false;
+        const call = await chain.getAnchorCall(doc.transactionHash);
+        if (!call || call.contentHash !== doc.contentHash || call.byteHash !== doc.sha256) return false;
+        const record = await chain.verify(doc.contentHash);
+        return record.exists && !record.revoked && record.byteHash === doc.sha256 && sameAddress(record.issuer, call.from);
     }
 
     /** Looks at the chain and moves BLOCKCHAIN_PENDING to ISSUED or FAILED. Returns {state, document}. */
@@ -130,6 +150,10 @@ function createIssuance({
         }
         if (contractAddress && !sameAddress(receipt.to, contractAddress)) {
             const failed = await documents.transition(doc.documentId, ['BLOCKCHAIN_PENDING'], 'FAILED', { failureReason: 'WRONG_CONTRACT' });
+            return { state: 'failed', document: failed || doc };
+        }
+        if (verifyAnchorData && !(await anchoredCorrectly(doc))) {
+            const failed = await documents.transition(doc.documentId, ['BLOCKCHAIN_PENDING'], 'FAILED', { failureReason: 'WRONG_DATA' });
             return { state: 'failed', document: failed || doc };
         }
         const issued = await documents.transition(doc.documentId, ['BLOCKCHAIN_PENDING'], 'ISSUED',
@@ -159,6 +183,40 @@ function createIssuance({
     }
 
     /**
+     * Revocation. The issuer's wallet sends revoke(contentHash, reason); this checks what happened on chain and only then mirrors it:
+     * ISSUED -> REVOKED. The reason is read from the transaction's calldata and the time from the Revoked event's block, so what is
+     * shown to verifiers is what the chain says, not what a client claims. A failed or unmined transaction changes nothing.
+     * @returns {{state: 'revoked'|'pending'|'failed', document}}
+     */
+    async function confirmRevocation(documentId, issuerName, transactionHash) {
+        const tx = checkTx(transactionHash);
+        if (!chain || typeof chain.getRevokeCall !== 'function') throw new IssuanceError(503, 'Blockchain verification is not available.');
+        const doc = await ownedDocument(documentId, issuerName);
+        if (doc.status === 'REVOKED') {
+            if (doc.revocationTxHash === tx) return { state: 'revoked', document: doc };       // idempotent
+            throw new IssuanceError(409, 'This document is already revoked.');
+        }
+        if (doc.status !== 'ISSUED') throw new IssuanceError(409, 'Only an issued document can be revoked.');
+        if (!doc.contentHash) throw new IssuanceError(409, 'This document has no content hash, so it was never on the registry.');
+
+        const receipt = await chain.getReceipt(tx);
+        if (receipt.state === 'not_found') return { state: 'pending', document: doc };
+        if (receipt.state === 'reverted' || (contractAddress && !sameAddress(receipt.to, contractAddress))) return { state: 'failed', document: doc };
+
+        const call = await chain.getRevokeCall(tx);
+        if (!call || call.contentHash !== doc.contentHash) throw new IssuanceError(409, 'This transaction does not revoke this document.');
+        const record = await chain.verify(doc.contentHash);
+        if (!record.exists || !record.revoked) return { state: 'failed', document: doc };      // the registry does not say revoked: believe the registry
+
+        let at = new Date(now());
+        try { const rev = await chain.getRevocation(doc.contentHash); if (rev && rev.txHash === tx) at = rev.at; } catch { /* the time is a nicety: the calldata and the registry already agree */ }
+        const revoked = await documents.transition(documentId, ['ISSUED'], 'REVOKED', {
+            revokedAt: at, revocationReason: String(call.reason).slice(0, 500), revocationTxHash: tx,
+        });
+        return { state: 'revoked', document: revoked || (await documents.findByDocumentId(documentId)) };
+    }
+
+    /**
      * The recovery sweep. Looks at records unchanged for `stuckMs`:
      *   PENDING             a request died mid-issuance        -> FAILED (STUCK_PENDING), retry reuses the stored object
      *   BLOCKCHAIN_PENDING  asks the chain what happened       -> ISSUED, FAILED, or left alone if still not mined
@@ -182,7 +240,7 @@ function createIssuance({
         return report;
     }
 
-    return { issue, markChainPending, confirmChain, markChainFailed, reconcile };
+    return { issue, markChainPending, confirmChain, markChainFailed, confirmRevocation, reconcile };
 }
 
 module.exports = { createIssuance, IssuanceError, STALE_PENDING_MS, STUCK_MS };

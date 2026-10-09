@@ -2,7 +2,7 @@
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
-const { MongoMemoryServer } = require('mongodb-memory-server');
+const { createMongod } = require('./mongo');
 const { connectDocuments } = require('../db');
 const { DuplicateDocumentError, STATUSES } = require('../documents');
 const { scrubString } = require('../logger');
@@ -12,12 +12,12 @@ let mongod;
 let documents;
 
 before(async () => {
-    mongod = await MongoMemoryServer.create();
+    mongod = await createMongod();
     documents = await connectDocuments(mongod.getUri());
 });
 after(async () => {
     await documents.close();
-    await mongod.stop();
+    await mongod.__stopAndClean();
 });
 beforeEach(async () => { await documents.model.deleteMany({}); });
 
