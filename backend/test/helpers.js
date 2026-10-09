@@ -1,6 +1,8 @@
 // Shared test helpers (not a test file: the glob only runs *.test.js).
 const bcrypt = require('bcryptjs');
+const { Transport } = require('winston');
 const { createApp } = require('../app');
+const { createLogger } = require('../logger');
 
 const TEST_PASSWORD = 'correct horse battery staple';
 const TEST_AUTH = {
@@ -15,9 +17,19 @@ function fakeS3() {
     return { sent, send: async (command) => { sent.push(command); return {}; } };
 }
 
+/** A logger that keeps what it would have written, as the final JSON text, so tests can inspect it. */
+function memoryLogger() {
+    const lines = [];
+    class Memory extends Transport {
+        log(info, done) { lines.push(info[Symbol.for('message')]); done(); }
+    }
+    return { lines, logger: createLogger({ logDir: null, silent: true, transports: [new Memory()] }) };
+}
+
 /** Starts the app on a random port. Returns the base URL and a close function. */
 async function start(s3 = fakeS3(), overrides = {}) {
-    const app = createApp({ s3, bucketName: 'test-bucket', region: 'ap-south-1', auth: TEST_AUTH, ...overrides });
+    const app = createApp({ s3, bucketName: 'test-bucket', region: 'ap-south-1', auth: TEST_AUTH,
+        logger: createLogger({ logDir: null, silent: true }), ...overrides });
     const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
     return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
 }
@@ -35,4 +47,4 @@ function postFile(url, bytes, { name = 'deed.pdf', token, type = 'application/pd
     return fetch(url, { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
 }
 
-module.exports = { TEST_AUTH, TEST_PASSWORD, fakeS3, start, loginToken, postFile };
+module.exports = { TEST_AUTH, TEST_PASSWORD, fakeS3, memoryLogger, start, loginToken, postFile };

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { S3Client } = require('@aws-sdk/client-s3');
 const { createApp } = require('./app');
+const { createLogger } = require('./logger');
 
 // --- CONFIGURATION ---
 const BUCKET_NAME = process.env.BUCKET_NAME;
@@ -21,12 +22,13 @@ const auth = {
     adminPasswordHash: process.env.ADMIN_PASSWORD_HASH,
 };
 
+const logger = createLogger();
 let app;
 try {
-    app = createApp({ s3, bucketName: BUCKET_NAME, region: REGION, auth });
+    app = createApp({ s3, bucketName: BUCKET_NAME, region: REGION, auth, logger });
 } catch (err) {
     console.error(err.message);   // config errors name the missing setting, never its value
     process.exit(1);
 }
 
-app.listen(5000, () => console.log("MindForge AWS Backend running on port 5000"));
+app.listen(5000, () => logger.info("MindForge AWS Backend running on port 5000"));
