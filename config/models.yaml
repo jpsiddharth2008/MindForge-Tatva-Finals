@@ -1,0 +1,24 @@
+# Template. Dev A fills in exact model IDs and the date checked in A2.
+# monitor_a and monitor_b must be from different model families (Axis 2 needs this).
+
+monitor_a:
+  model_id: "PLACEHOLDER/fill-in-A2"
+  family: "PLACEHOLDER"
+  checked_on: "PLACEHOLDER"
+
+monitor_b:
+  model_id: "PLACEHOLDER/fill-in-A2"
+  family: "PLACEHOLDER"
+  checked_on: "PLACEHOLDER"
+
+agent_model:
+  model_id: "PLACEHOLDER/fill-in-A2"
+  family: "PLACEHOLDER"
+  checked_on: "PLACEHOLDER"
+
+backup_provider:
+  name: "PLACEHOLDER (Groq or Gemini)"
+  base_url: "PLACEHOLDER"
+
+rate_limit:
+  requests_per_minute: 35  # default; confirm the real limit in A2's research task
