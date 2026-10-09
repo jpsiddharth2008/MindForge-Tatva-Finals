@@ -110,21 +110,23 @@ function lookupKey({ issuer, idNumber, docType }) {
     return sha256(`mindforge:lookup:v1\n${norm(issuer)}|${norm(docType)}|${normId(idNumber)}`);
 }
 
+/** A canonical record as one flat object: payload fields become "payload.<key>". */
+function flatRecord(r) {
+    const out = {};
+    for (const [k, v] of Object.entries(r || {})) {
+        if (k === 'payload') for (const [pk, pv] of Object.entries(v || {})) out[`payload.${pk}`] = pv;
+        else out[k] = v;
+    }
+    return out;
+}
+
 /** Flat list of every field that differs between two canonical records. Payload fields are named "payload.<key>". */
 function diffRecords(anchored, presented) {
-    const flat = (r) => {
-        const out = {};
-        for (const [k, v] of Object.entries(r || {})) {
-            if (k === 'payload') for (const [pk, pv] of Object.entries(v || {})) out[`payload.${pk}`] = pv;
-            else out[k] = v;
-        }
-        return out;
-    };
-    const a = flat(anchored);
-    const p = flat(presented);
+    const a = flatRecord(anchored);
+    const p = flatRecord(presented);
     return [...new Set([...Object.keys(a), ...Object.keys(p)])].sort()
         .filter((k) => (a[k] ?? null) !== (p[k] ?? null))
         .map((k) => ({ field: k, anchored: a[k] ?? null, presented: p[k] ?? null }));
 }
 
-module.exports = { canonicalRecord, contentHash, lookupKey, diffRecords, stableStringify, toISODate, norm, normId, normValue, FieldError, REQUIRED, VERSION_TAG };
+module.exports = { canonicalRecord, contentHash, lookupKey, diffRecords, flatRecord, stableStringify, toISODate, norm, normId, normValue, FieldError, REQUIRED, VERSION_TAG };

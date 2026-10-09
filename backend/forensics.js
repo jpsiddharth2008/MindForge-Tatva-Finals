@@ -79,7 +79,11 @@ function verify(input, t = THRESHOLDS) {
   }
   if (visual) {
     tiers.visual = { distance: visual.distance, regions: visual.cellDistances || [],
-                     divergedCells: divergedCells(visual.cellDistances, t.cellFar) };
+                     divergedCells: visual.divergedCells || divergedCells(visual.cellDistances, t.cellFar) };
+    if (visual.advice) {                     // Tier 3's own judgement (phash.js), already made with its measured thresholds
+      tiers.visual.advice = visual.advice;
+      tiers.visual.changedRegions = visual.changedRegions || [];
+    }
   }
   if (revoked) {
     return report('REVOKED', 'HIGH', tiers, anchor, 'The anchor was revoked by the issuer.');
@@ -99,6 +103,19 @@ function verify(input, t = THRESHOLDS) {
   // Content matches, bytes do not: only the visual tier can tell a copy from a substitution.
   if (!visual) {
     return report('INCONCLUSIVE', 'LOW', tiers, anchor, 'Content matches but no visual evidence was available.');
+  }
+  if (visual.advice) {
+    // Tier 3 is advisory: it can flag a region (REVIEW) or say it cannot tell (UNCLEAR), and it only ever AGREES with a
+    // content match that Tier 2 already established. It is never what makes a document authentic.
+    if (visual.advice === 'REVIEW') {
+      return report('TAMPERED_VISUAL', 'MEDIUM', tiers, anchor,
+        'Text matches but a region of the picture changed (possible photo or graphic substitution). A person should look.');
+    }
+    if (visual.advice === 'UNCLEAR') {
+      return report('INCONCLUSIVE', 'LOW', tiers, anchor,
+        'Text matches, but the picture is too different from the original to compare its appearance. Request a better capture.');
+    }
+    return report('AUTHENTIC_COPY', 'MEDIUM', tiers, anchor, 'Content matches and nothing in the appearance stands out; the file is a re-capture or copy.');
   }
   if (visual.distance > t.visualFar || tiers.visual.divergedCells.length > 0) {
     return report('TAMPERED_VISUAL', 'MEDIUM', tiers, anchor,

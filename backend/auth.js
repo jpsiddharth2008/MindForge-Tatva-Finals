@@ -45,7 +45,19 @@ function createAuth(cfg) {
         }
     }
 
-    return { login, requireAuth };
+    /**
+     * Like requireAuth, but a request with no valid token carries on as an anonymous member of the public. Used where issuers get
+     * more detail than the public (for example, verification shows an issuer the document's true field values).
+     */
+    function optionalAuth(req, res, next) {
+        const match = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+        if (match) {
+            try { req.user = jwt.verify(match[1], jwtSecret, { algorithms: [ALGORITHM], issuer: ISSUER }); } catch { /* treated as the public */ }
+        }
+        next();
+    }
+
+    return { login, requireAuth, optionalAuth };
 }
 
 module.exports = { createAuth, validateAuthConfig, MIN_SECRET_LENGTH };
