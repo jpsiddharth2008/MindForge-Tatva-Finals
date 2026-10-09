@@ -9,6 +9,7 @@ const { createStorage, presignTtlFromEnv, sseFromEnv } = require('./storage');
 const { publicView } = require('./documents');
 const { createIssuance } = require('./issuance');
 const { createChain } = require('./chain');
+const { ACTIONS, OUTCOMES } = require('./audit');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
 
@@ -38,6 +39,7 @@ function createApp({
     contractAddress,
     chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL }) : null,   // read-only chain access; confirms transactions
     issuanceOptions = {},                      // staleMs / stuckMs / now, for tests
+    audit,                                     // audit trail (audit.js). Without it, events are not recorded.
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -50,6 +52,8 @@ function createApp({
     app.use(express.json({ limit: '1mb' }));
 
     const storage = createStorage({ s3, bucketName, sse, presignTtlSeconds, presign });
+    // Auditing is best effort: audit.record() swallows its own errors, and with no audit configured this does nothing.
+    const record = (req, event) => (audit ? audit.record({ ip: req.ip, ...event }) : Promise.resolve(false));
     const issuance = documents ? createIssuance({ documents, storage, chain, chainId, contractAddress, ...issuanceOptions }) : null;
     const fileLimit = limiter({ ...DEFAULT_LIMITS.files, ...rateLimits.files });
     const loginLimit = limiter({ ...DEFAULT_LIMITS.login, ...rateLimits.login });
@@ -59,17 +63,34 @@ function createApp({
 
     // --- ROUTE: Hash only (verification) ---
     // The suspect file never leaves this request: no S3 write, no disk write.
-    app.post('/api/hash', fileLimit, ...uploadFile, (req, res) => {
-        const file = req.file;
-        if (!file) return res.status(400).send("No file.");
-        res.json({ success: true, hash: sha256(file.buffer) });
+    app.post('/api/hash', fileLimit, ...uploadFile, async (req, res, next) => {
+        try {
+            const file = req.file;
+            if (!file) return res.status(400).send("No file.");
+            const hash = sha256(file.buffer);
+            if (audit && documents) {
+                // Who checked a document and what they found. The hash is looked up but never written to the audit trail.
+                const found = await documents.findBySha256(hash).catch(() => null);
+                const verdict = !found ? { outcome: 'FAILED', reason: 'NO_MATCH' }
+                    : found.status === 'ISSUED' ? { outcome: 'SUCCESS', reason: 'MATCH' }
+                    : found.status === 'REVOKED' ? { outcome: 'FAILED', reason: 'REVOKED' }
+                    : { outcome: 'FAILED', reason: 'NOT_ISSUED' };
+                await record(req, { action: 'VERIFY', documentId: found ? found.documentId : undefined, ...verdict });
+            }
+            res.json({ success: true, hash });
+        } catch (err) { next(err); }
     });
 
     // --- ROUTE: Issuer login ---
     app.post('/api/auth/login', loginLimit, async (req, res) => {
         const { username, password } = req.body || {};
         const token = await auth.login(username, password);
-        if (!token) return res.status(401).json({ success: false, error: 'Invalid credentials.' });
+        if (!token) {
+            // the attempted username is NOT recorded: people sometimes type their password into that field
+            await record(req, { action: 'LOGIN', outcome: 'FAILED', reason: 'BAD_CREDENTIALS' });
+            return res.status(401).json({ success: false, error: 'Invalid credentials.' });
+        }
+        await record(req, { action: 'LOGIN', outcome: 'SUCCESS', actorName: username });
         res.json({ success: true, token });
     });
 
@@ -96,6 +117,8 @@ function createApp({
                 }
                 const { url, expiresInSeconds } = await storage.signedUrl(r.key);
                 const duplicate = r.outcome === 'duplicate';
+                await record(req, { action: 'ISSUE', outcome: 'SUCCESS', reason: duplicate ? 'DUPLICATE' : 'STORED',
+                    actorName: req.user.sub, documentId: r.document.documentId });
                 return res.json({
                     success: true, duplicate, hash, s3Key: r.key, url, urlExpiresInSeconds: expiresInSeconds,
                     alreadyStored: duplicate ? true : r.alreadyStored, document: publicView(r.document),
@@ -116,6 +139,7 @@ function createApp({
             });
 
         } catch (err) {
+            await record(req, { action: 'ISSUE', outcome: 'FAILED', reason: 'ERROR', actorName: req.user && req.user.sub });
             next(err);   // logged (redacted) and answered generically by errorHandler
         }
     });
@@ -145,16 +169,50 @@ function createApp({
         } catch (err) { next(err); }
     };
     // A wallet transaction was sent: STORED -> BLOCKCHAIN_PENDING (repeating the same call is harmless)
-    app.post('/api/documents/:id/chain-pending', auth.requireAuth, chainStep(async (req) =>
-        ({ success: true, document: publicView(await issuance.markChainPending(req.params.id, req.user.sub, (req.body || {}).transactionHash)) })));
+    app.post('/api/documents/:id/chain-pending', auth.requireAuth, chainStep(async (req) => {
+        const doc = await issuance.markChainPending(req.params.id, req.user.sub, (req.body || {}).transactionHash);
+        await record(req, { action: 'ISSUE', outcome: 'SUCCESS', reason: 'CHAIN_PENDING', actorName: req.user.sub, documentId: doc.documentId });
+        return { success: true, document: publicView(doc) };
+    }));
     // Ask the server to check the transaction on chain: BLOCKCHAIN_PENDING -> ISSUED (or FAILED, or still pending)
     app.post('/api/documents/:id/chain-confirmed', auth.requireAuth, chainStep(async (req) => {
         const r = await issuance.confirmChain(req.params.id, req.user.sub, (req.body || {}).transactionHash);
+        if (r.state === 'issued') await record(req, { action: 'ISSUE', outcome: 'SUCCESS', reason: 'CHAIN_CONFIRMED', actorName: req.user.sub, documentId: r.document.documentId });
+        if (r.state === 'failed') await record(req, { action: 'ISSUE', outcome: 'FAILED', reason: r.document.failureReason, actorName: req.user.sub, documentId: r.document.documentId });
         return { success: true, state: r.state, document: publicView(r.document) };
     }));
     // The wallet rejected or failed the transaction: -> FAILED, so the record is not left looking half-issued
-    app.post('/api/documents/:id/chain-failed', auth.requireAuth, chainStep(async (req) =>
-        ({ success: true, document: publicView(await issuance.markChainFailed(req.params.id, req.user.sub, (req.body || {}).reason)) })));
+    app.post('/api/documents/:id/chain-failed', auth.requireAuth, chainStep(async (req) => {
+        const doc = await issuance.markChainFailed(req.params.id, req.user.sub, (req.body || {}).reason);
+        await record(req, { action: 'ISSUE', outcome: 'FAILED', reason: doc.failureReason, actorName: req.user.sub, documentId: doc.documentId });
+        return { success: true, document: publicView(doc) };
+    }));
+
+    // --- ROUTES: the audit trail (issuers only) ---
+    // Everything that happened to one of your documents, newest first.
+    app.get('/api/documents/:id/audit', auth.requireAuth, async (req, res, next) => {
+        try {
+            if (!audit || !documents) return res.status(503).json({ success: false, error: 'Audit trail is not available.', requestId: req.id });
+            if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            const doc = await documents.findByDocumentId(req.params.id);
+            if (!doc || doc.issuerName !== req.user.sub) return next(Object.assign(new Error('not found'), { status: 404 }));
+            res.json({ success: true, events: await audit.forDocument(req.params.id) });
+        } catch (err) { next(err); }
+    });
+    // Recent events across everything, with filters and a `before` cursor for paging.
+    app.get('/api/audit', auth.requireAuth, async (req, res, next) => {
+        try {
+            if (!audit) return res.status(503).json({ success: false, error: 'Audit trail is not available.', requestId: req.id });
+            const { action, outcome, before } = req.query;
+            const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+            const bad = Object.keys(req.query).some((k) => !['action', 'outcome', 'limit', 'before'].includes(k))   // unknown or bracketed keys
+                || (action !== undefined && !ACTIONS.includes(action)) || (outcome !== undefined && !OUTCOMES.includes(outcome))
+                || !Number.isInteger(limit) || limit < 1 || limit > 200
+                || (before !== undefined && (typeof before !== 'string' || Number.isNaN(Date.parse(before))));
+            if (bad) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            res.json({ success: true, events: await audit.recent({ action, outcome, limit, before: before && new Date(before) }) });
+        } catch (err) { next(err); }
+    });
 
     // --- ROUTE: Health (public, no secrets) ---
     app.get('/api/health', healthHandler({

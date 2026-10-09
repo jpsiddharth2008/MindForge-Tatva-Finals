@@ -1,11 +1,13 @@
-// Starts a real in-memory MongoDB for a test file and connects the document repository to it.
+// Starts a real in-memory MongoDB for a test file and connects the repositories to it.
 const { MongoMemoryServer } = require('mongodb-memory-server');
-const { connectDocuments } = require('../db');
+const { connectDatabase } = require('../db');
 
-async function startMongo() {
-    const mongod = await MongoMemoryServer.create();
-    const documents = await connectDocuments(mongod.getUri());
-    return { documents, stop: async () => { await documents.close(); await mongod.stop(); } };
+/** @param {{fastTtl?: boolean, retentionDays?: number}} options  fastTtl makes MongoDB expire TTL documents every second (default: every 60 s) */
+async function startMongo({ fastTtl = false, retentionDays, logger } = {}) {
+    const args = fastTtl ? ['--setParameter', 'ttlMonitorSleepSecs=1'] : [];
+    const mongod = await MongoMemoryServer.create({ instance: { args } });
+    const db = await connectDatabase(mongod.getUri(), { retentionDays, logger });
+    return { documents: { ...db.documents, close: db.close }, audit: db.audit, stop: async () => { await db.close(); await mongod.stop(); } };
 }
 
 module.exports = { startMongo };

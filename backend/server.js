@@ -3,7 +3,7 @@ const { S3Client } = require('@aws-sdk/client-s3');
 const { createApp } = require('./app');
 const { createLogger } = require('./logger');
 const { installGracefulShutdown } = require('./security');
-const { connectDocuments } = require('./db');
+const { connectDatabase } = require('./db');
 
 // --- CONFIGURATION ---
 const BUCKET_NAME = process.env.BUCKET_NAME;
@@ -28,9 +28,10 @@ const logger = createLogger();
 
 async function main() {
     let documents;
+    let audit;
     if (process.env.MONGODB_URI) {
         try {
-            documents = await connectDocuments(process.env.MONGODB_URI);
+            ({ documents, audit } = await connectDatabase(process.env.MONGODB_URI, { logger }));
             logger.info('connected to MongoDB');
         } catch (err) {
             logger.error('could not connect to MongoDB', { errorMessage: err.message });   // the logger scrubs any URI in the message
@@ -43,7 +44,7 @@ async function main() {
     let app;
     try {
         app = createApp({
-            s3, bucketName: BUCKET_NAME, region: REGION, auth, logger, documents,
+            s3, bucketName: BUCKET_NAME, region: REGION, auth, logger, documents, audit,
             chainId: process.env.CHAIN_ID ? Number(process.env.CHAIN_ID) : undefined,
             contractAddress: process.env.CONTRACT_ADDRESS || undefined,
             rateLimits: process.env.RATE_LIMIT_PER_MIN ? { files: { limit: Number(process.env.RATE_LIMIT_PER_MIN) } } : {},
