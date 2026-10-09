@@ -6,6 +6,7 @@ const { requestContext, errorHandler } = require('./errors');
 const helmet = require('helmet');
 const { singleFileUpload } = require('./uploads');
 const { createStorage, presignTtlFromEnv, sseFromEnv } = require('./storage');
+const { publicView, DuplicateDocumentError, DUPLICATE_STATUSES } = require('./documents');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
 
@@ -30,6 +31,9 @@ function createApp({
     sse = sseFromEnv(),                        // server-side encryption: { mode: 'AES256' | 'aws:kms', kmsKeyId }
     presignTtlSeconds = presignTtlFromEnv(),   // signed link lifetime, capped at 300 s
     presign,                                   // (command, ttl) => url; only replaced in tests
+    documents,                                 // document records (documents.js). Without it, nothing is recorded.
+    chainId,                                   // recorded on each document
+    contractAddress,
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -74,12 +78,43 @@ function createApp({
             // 1. SHA-256 of the content. It is also the S3 key.
             const hash = sha256(file.buffer);
 
-            // 2. Store encrypted under that key (an identical file already there is left untouched)
+            // 2. Duplicate check BEFORE anything is stored or anchored: an already-issued file is not stored or anchored again
+            let retry = null;
+            if (documents) {
+                const existing = await documents.findBySha256(hash);
+                if (existing && DUPLICATE_STATUSES.includes(existing.status)) {
+                    const { url, expiresInSeconds } = await storage.signedUrl(existing.s3Key);
+                    return res.json({
+                        success: true, duplicate: true, hash, s3Key: existing.s3Key, url, urlExpiresInSeconds: expiresInSeconds,
+                        document: publicView(existing), message: "This exact document was already stored. Nothing was written.",
+                    });
+                }
+                retry = existing;   // PENDING or FAILED: a retry of an earlier attempt
+            }
+
+            // 3. Store encrypted under that key (an identical file already there is left untouched)
             const { key, alreadyStored } = await storage.store({
                 hash, buffer: file.buffer, contentType: file.detectedMime, originalName: file.safeName,
             });
 
-            // 3. Hand back a short-lived signed link; the bucket itself is private
+            // 4. Record it: this row is what links the S3 object to the hash that goes on the chain
+            let document = null;
+            let duplicate = false;
+            if (documents) {
+                const fields = {
+                    sha256: hash, byteHash: hash, s3Key: key, originalFileName: file.safeName, mimeType: file.detectedMime,
+                    size: file.size, issuerName: req.user.sub, chainId, contractAddress, status: 'STORED',
+                };
+                try {
+                    document = retry ? await documents.restore(retry.documentId, fields) : await documents.create(fields);
+                } catch (err) {
+                    if (!(err instanceof DuplicateDocumentError)) throw err;
+                    document = await documents.findBySha256(hash);    // lost a race with another request for the same bytes
+                    duplicate = true;
+                }
+            }
+
+            // 5. Hand back a short-lived signed link; the bucket itself is private
             const { url, expiresInSeconds } = await storage.signedUrl(key);
 
             res.json({
@@ -89,6 +124,8 @@ function createApp({
                 url,
                 urlExpiresInSeconds: expiresInSeconds,
                 alreadyStored,
+                duplicate,
+                document: publicView(document),
                 message: alreadyStored ? "This exact file was already stored." : "File stored in AWS S3. Hash generated.",
             });
 
@@ -97,11 +134,27 @@ function createApp({
         }
     });
 
+    // --- ROUTES: look up an issued document (issuers only) ---
+    // Specific routes first so "by-hash" is not read as a document id. Parameters are format-checked before any query.
+    const lookup = (pattern, find) => async (req, res, next) => {
+        try {
+            if (!documents) return res.status(503).json({ success: false, error: 'Document records are not available.', requestId: req.id });
+            const value = req.params.value;
+            if (!pattern.test(value)) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            const doc = await find(value);
+            if (!doc) return next(Object.assign(new Error('not found'), { status: 404 }));
+            res.json({ success: true, document: publicView(doc) });
+        } catch (err) { next(err); }
+    };
+    app.get('/api/documents/by-hash/:value', auth.requireAuth, lookup(/^[a-f0-9]{64}$/, (v) => documents.findBySha256(v)));
+    app.get('/api/documents/by-tx/:value', auth.requireAuth, lookup(/^0x[a-fA-F0-9]{64}$/, (v) => documents.findByTransactionHash(v)));
+    app.get('/api/documents/:value', auth.requireAuth, lookup(/^[0-9a-f-]{36}$/, (v) => documents.findByDocumentId(v)));
+
     // --- ROUTE: Health (public, no secrets) ---
     app.get('/api/health', healthHandler({
         app: async () => 'ok',
         s3_config: async () => (bucketName && region ? 'ok' : 'not_configured'),   // config only: no S3 call
-        mongodb: async () => 'not_configured',                                    // replaced when the database lands (#53)
+        mongodb: documents ? () => documents.ping() : async () => 'not_configured',
         ...chainChecks(),
         ...health,
     }));
