@@ -26,10 +26,13 @@ function memoryLogger() {
     return { lines, logger: createLogger({ logDir: null, silent: true, transports: [new Memory()] }) };
 }
 
+/** Stands in for getSignedUrl so route tests need no AWS credentials. */
+const fakePresign = async (command, ttl) => `https://signed.test/${command.input.Key}?X-Amz-Expires=${ttl}&X-Amz-Signature=fake`;
+
 /** Starts the app on a random port. Returns the base URL and a close function. */
 async function start(s3 = fakeS3(), overrides = {}) {
     const app = createApp({ s3, bucketName: 'test-bucket', region: 'ap-south-1', auth: TEST_AUTH,
-        logger: createLogger({ logDir: null, silent: true }), ...overrides });
+        logger: createLogger({ logDir: null, silent: true }), presign: fakePresign, ...overrides });
     const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
     return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
 }
@@ -47,4 +50,4 @@ function postFile(url, bytes, { name = 'deed.pdf', token, type = 'application/pd
     return fetch(url, { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
 }
 
-module.exports = { TEST_AUTH, TEST_PASSWORD, fakeS3, memoryLogger, start, loginToken, postFile };
+module.exports = { TEST_AUTH, TEST_PASSWORD, fakePresign, fakeS3, memoryLogger, start, loginToken, postFile };

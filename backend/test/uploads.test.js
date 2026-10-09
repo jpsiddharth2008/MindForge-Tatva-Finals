@@ -124,7 +124,7 @@ test('more than one file, or the wrong field name, is a 400', async () => {
     } finally { await api.close(); }
 });
 
-test('what is stored: sanitised name as the key, the DETECTED type as ContentType, and a safe URL', async () => {
+test('what is stored: the content hash as the key, the sanitised name only as metadata, the DETECTED type as ContentType', async () => {
     const s3 = fakeS3();
     const api = await start(s3);
     try {
@@ -132,11 +132,10 @@ test('what is stored: sanitised name as the key, the DETECTED type as ContentTyp
         const res = await post(api, '/api/anchor', PNG, { name: '../../etc/pass wd<script>.png', type: 'image/png', token });
         assert.strictEqual(res.status, 200);
         const input = s3.sent[0].input;
-        assert.match(input.Key, /^[A-Za-z0-9._ -]+$/);
-        assert.ok(!input.Key.includes('..') && !input.Key.includes('/'), `unsafe key: ${input.Key}`);
+        assert.match(input.Key, /^[a-f0-9]{64}$/, 'the key is the hash, never client text');
+        assert.match(input.Metadata['original-filename'], /^[A-Za-z0-9._ -]+$/);
+        assert.ok(!input.Metadata['original-filename'].includes('..') && !input.Metadata['original-filename'].includes('/'));
         assert.strictEqual(input.ContentType, 'image/png');
-        const { url } = await res.json();
-        assert.ok(!url.includes('<') && !url.includes('..'), `unsafe url: ${url}`);
     } finally { await api.close(); }
 });
 

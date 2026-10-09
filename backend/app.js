@@ -1,11 +1,11 @@
 const express = require('express');
 const crypto = require('crypto');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { createAuth } = require('./auth');
 const { createLogger } = require('./logger');
 const { requestContext, errorHandler } = require('./errors');
 const helmet = require('helmet');
 const { singleFileUpload } = require('./uploads');
+const { createStorage, presignTtlFromEnv, sseFromEnv } = require('./storage');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
 
@@ -27,6 +27,9 @@ function createApp({
     health = {},                               // extra or replacement health checks: name -> async () => 'ok' | 'not_configured'
     trustProxy = false,                        // set to the proxy hop count when running behind a load balancer
     maxFileSizeMb,                             // upload size limit; defaults to MAX_FILE_SIZE_MB or 10
+    sse = sseFromEnv(),                        // server-side encryption: { mode: 'AES256' | 'aws:kms', kmsKeyId }
+    presignTtlSeconds = presignTtlFromEnv(),   // signed link lifetime, capped at 300 s
+    presign,                                   // (command, ttl) => url; only replaced in tests
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -38,6 +41,7 @@ function createApp({
     app.use(corsAllowlist(corsOrigins));
     app.use(express.json({ limit: '1mb' }));
 
+    const storage = createStorage({ s3, bucketName, sse, presignTtlSeconds, presign });
     const fileLimit = limiter({ ...DEFAULT_LIMITS.files, ...rateLimits.files });
     const loginLimit = limiter({ ...DEFAULT_LIMITS.login, ...rateLimits.login });
 
@@ -67,27 +71,25 @@ function createApp({
             const file = req.file;
             if (!file) return res.status(400).send("No file.");
 
-            // 1. Create SHA-256 Hash
+            // 1. SHA-256 of the content. It is also the S3 key.
             const hash = sha256(file.buffer);
 
-            // 2. Upload to AWS S3
-            const params = {
-                Bucket: bucketName,
-                Key: file.safeName, // sanitised name; content-addressed keys come with #51
-                Body: file.buffer,
-                ContentType: file.detectedMime,   // from the bytes, not the client's header
-            };
+            // 2. Store encrypted under that key (an identical file already there is left untouched)
+            const { key, alreadyStored } = await storage.store({
+                hash, buffer: file.buffer, contentType: file.detectedMime, originalName: file.safeName,
+            });
 
-            await s3.send(new PutObjectCommand(params));
-
-            // 3. Send Hash & URL back to Frontend
-            const fileUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${encodeURIComponent(file.safeName)}`;
+            // 3. Hand back a short-lived signed link; the bucket itself is private
+            const { url, expiresInSeconds } = await storage.signedUrl(key);
 
             res.json({
                 success: true,
-                hash: hash,
-                url: fileUrl,
-                message: "File stored in AWS S3. Hash generated."
+                hash,
+                s3Key: key,
+                url,
+                urlExpiresInSeconds: expiresInSeconds,
+                alreadyStored,
+                message: alreadyStored ? "This exact file was already stored." : "File stored in AWS S3. Hash generated.",
             });
 
         } catch (err) {
