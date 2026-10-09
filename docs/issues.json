@@ -1,0 +1,1157 @@
+{
+  "project": "Who Guards the Guard?",
+  "owners": {
+    "A": "Dev A - Measurement",
+    "B": "Dev B - Attack surface",
+    "C": "Dev C - Guard & demo",
+    "D": "Member D - Pitch, docs & QA"
+  },
+  "labels": [
+    {
+      "name": "P0",
+      "color": "B60205",
+      "description": "Must ship: the project fails without it"
+    },
+    {
+      "name": "P1",
+      "color": "D93F0B",
+      "description": "Should ship: strong score impact"
+    },
+    {
+      "name": "P2",
+      "color": "FBCA04",
+      "description": "Stretch: only after all P0 and P1 are done"
+    },
+    {
+      "name": "area:measurement",
+      "color": "1D76DB",
+      "description": "Dev A - reliability, stats, experiments, report"
+    },
+    {
+      "name": "area:attack",
+      "color": "5319E7",
+      "description": "Dev B - corpus, channels, swarm"
+    },
+    {
+      "name": "area:guard",
+      "color": "0E8A16",
+      "description": "Dev C - monitor, gateway, UI, demo"
+    },
+    {
+      "name": "area:pitch-docs",
+      "color": "C5DEF5",
+      "description": "Member D - docs, citations, deck, QA"
+    },
+    {
+      "name": "type:feature",
+      "color": "A2EEEF",
+      "description": "Builds something"
+    },
+    {
+      "name": "type:experiment",
+      "color": "BFD4F2",
+      "description": "Produces evidence or numbers"
+    },
+    {
+      "name": "type:test",
+      "color": "D4C5F9",
+      "description": "Testing or QA"
+    },
+    {
+      "name": "type:docs",
+      "color": "FEF2C0",
+      "description": "Writing"
+    },
+    {
+      "name": "blocked",
+      "color": "000000",
+      "description": "Waiting on another issue (say which in a comment)"
+    },
+    {
+      "name": "bug",
+      "color": "D73A4A",
+      "description": "Found during testing"
+    }
+  ],
+  "milestones": [
+    {
+      "key": "M0",
+      "title": "M0 - Kickoff and contracts (Fri 15:00)",
+      "due_on": "2026-10-09T09:30:00Z",
+      "description": "Repo, skeleton, contracts frozen, API keys working"
+    },
+    {
+      "key": "M1",
+      "title": "M1 - Foundations (Fri 18:00)",
+      "due_on": "2026-10-09T12:30:00Z",
+      "description": "Corpus, LLM client and cache, monitor, stats and SimJudge, channel fixtures"
+    },
+    {
+      "key": "M2",
+      "title": "M2 - First real numbers (Fri 22:00)",
+      "due_on": "2026-10-09T16:30:00Z",
+      "description": "Axes, buckets, offline audit; swarm with retries; gateway decision. Checkpoint: demoable and novel"
+    },
+    {
+      "key": "M3",
+      "title": "M3 - Retry and defence (Sat 02:00)",
+      "due_on": "2026-10-09T20:30:00Z",
+      "description": "Sticky cache, budget, live retry runs, ablation"
+    },
+    {
+      "key": "M4",
+      "title": "M4 - Report and UI (Sat 06:00)",
+      "due_on": "2026-10-10T00:30:00Z",
+      "description": "Report and grade, predicted vs observed, demo UI with replay"
+    },
+    {
+      "key": "M5",
+      "title": "M5 - Freeze and rehearse (Sat 10:00)",
+      "due_on": "2026-10-10T04:30:00Z",
+      "description": "Feature freeze 08:00, final evidence rerun, clean-clone test, video, rehearsals"
+    },
+    {
+      "key": "M6",
+      "title": "M6 - Submit (Sat 11:00)",
+      "due_on": "2026-10-10T05:30:00Z",
+      "description": "README numbers, v1.0 tag, submission"
+    }
+  ],
+  "issues": [
+    {
+      "id": "A1",
+      "owner": "A",
+      "title": "Repo skeleton and frozen shared contracts",
+      "priority": "P0",
+      "estimate": 1.0,
+      "milestone": "M0",
+      "depends": [
+        "D1"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:feature"
+      ],
+      "why": "Three people can only build in parallel if the shared data types are fixed early.",
+      "files": [
+        "core/contracts.py",
+        "core/evidence.py",
+        "reliability/buckets.py (temporary stub)",
+        "config/models.yaml (template)",
+        ".gitignore",
+        ".env.example",
+        "requirements.txt",
+        "pytest.ini",
+        "*/__init__.py (empty, one per package)"
+      ],
+      "tasks": [
+        "Create the folders: core, llm, reliability, experiments, report, reports, corpus, channels, swarm, guard, ui, demo, evidence, tests/measurement, tests/attack, tests/guard.",
+        "Write Message, Verdict, Decision and the Judge and Gateway protocols exactly as in Section 4.5.",
+        "Write core/evidence.py: append_event(path, event) adds one JSON line with run_id, seed, corpus_sha256 and model IDs.",
+        "Add a stub decide(verdicts) in reliability/buckets.py (simple majority) so the gateway can integrate before A4.",
+        "`.gitignore`: `.env`, `__pycache__/`, `.cache/`, `*.sqlite`. `.env.example`: `NIM_API_KEY=`",
+        "Tag contracts-v1 at 15:00 and post the tag on this issue."
+      ],
+      "acceptance": [
+        "`pytest` runs and `python -c \"import core.contracts\"` works.",
+        "Dev B and Dev C comment \"contracts OK\" on this issue.",
+        "After the tag, contract changes go through a PR approved by Dev B and Dev C."
+      ],
+      "out_of_scope": "Creating the repo and the README (Member D: D1, D3)."
+    },
+    {
+      "id": "A2",
+      "owner": "A",
+      "title": "NVIDIA NIM client with sqlite cache, rate limiter and pinned models",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M1",
+      "depends": [
+        "A1"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:feature"
+      ],
+      "why": "Every experiment needs cheap, repeatable model calls, and the free tier is rate-limited.",
+      "files": [
+        "llm/client.py",
+        "llm/cache.py",
+        "llm/smoke.py",
+        "config/models.yaml",
+        "tests/measurement/test_cache.py"
+      ],
+      "tasks": [
+        "complete(model, messages, temperature, sample_idx, max_tokens) -> str, using the openai package with base_url https://integrate.api.nvidia.com/v1 and NIM_API_KEY from .env.",
+        "Cache key = sha256 of (model, messages, temperature, sample_idx). sample_idx keeps repeat samples distinct and replayable.",
+        "Rate limiter (default 35 requests per minute per key) and exponential backoff on 429 and 5xx (up to 5 tries).",
+        "config/models.yaml: exact IDs for monitor_a, monitor_b (a different model family) and agents, the date checked, and a backup provider block (Groq or Gemini).",
+        "`python -m llm.smoke` calls each configured model once and prints latency.",
+        "Count cache hits and misses so evidence shows how many real calls were made."
+      ],
+      "acceptance": [
+        "A repeated call is served from the cache with no network call (tested with a fake transport).",
+        "The smoke test passes for monitor_a and monitor_b.",
+        "No API key appears in the repo or in logs."
+      ],
+      "out_of_scope": "Monitor prompt (C1) and agent prompts (B3)."
+    },
+    {
+      "id": "A3",
+      "owner": "A",
+      "title": "SimJudge and statistics module with unit tests",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M1",
+      "depends": [
+        "A1"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:feature",
+        "type:test"
+      ],
+      "why": "Proves the maths before spending API calls, and lets Dev B and Dev C build without keys.",
+      "files": [
+        "core/sim_judge.py",
+        "reliability/stats.py",
+        "tests/measurement/test_stats.py"
+      ],
+      "tasks": [
+        "SimJudge(p_block, seed) implements Judge: BLOCK with probability p_block, deterministic for a given (seed, content, sample_idx).",
+        "stats.py: `wilson_interval(k, n)`, `breach_at(p, n) = 1 - p**n`, `ebp_at(p, n) = p**n`, `system_breach(ps, n)` = mean of breach_at, `bootstrap_ci(values)`, `agreement(verdicts)`, `self_consistency(verdicts)`.",
+        "Test: SimJudge(0.85) over 2,000 samples gives a Wilson interval containing 0.85.",
+        "Tests: breach_at(0.85, 5) = 0.5563 ± 0.0001; system_breach([1.0, 0.7], 5) = 0.416 ± 0.001; P(at least 4 of 5 ALLOW | p = 0.85) = 0.0022 ± 0.0001."
+      ],
+      "acceptance": [
+        "pytest passes.",
+        "Dev A can explain Breach@N and the averaging example (finding F2) at a whiteboard in 60 seconds."
+      ],
+      "out_of_scope": "Bucket rules (A4)."
+    },
+    {
+      "id": "A4",
+      "owner": "A",
+      "title": "Reliability axes and bucket rules",
+      "priority": "P0",
+      "estimate": 2.5,
+      "milestone": "M2",
+      "depends": [
+        "A2",
+        "A3"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:feature"
+      ],
+      "why": "These instruments turn one verdict into a measured probability, and decide every message.",
+      "files": [
+        "reliability/axes.py",
+        "reliability/rewordings.py",
+        "reliability/buckets.py",
+        "tests/measurement/test_rewordings.py",
+        "tests/measurement/test_buckets.py"
+      ],
+      "tasks": [
+        "repeat(judge, content, k): k verdicts with sample_idx 0 to k-1.",
+        "cross_model(judge_b, content, k).",
+        "Six content-invariant rewordings: forwarded-message header, polite preface, markdown quote, code fence, bullet wrapper, all-caps banner line above the text. The original text must appear verbatim inside every variant.",
+        "decide(verdicts) -> bucket as in Section 4.6: CONFIRMED_BLOCK if at least 4 of 5 are BLOCK, CONFIRMED_ALLOW if at least 4 of 5 are ALLOW, otherwise UNSTABLE if the repeat verdicts disagree, else CONTESTED. Thresholds come from config.",
+        "Replace the A1 stub without changing its signature."
+      ],
+      "acceptance": [
+        "A test proves the original text is a substring of every rewording, so meaning is untouched.",
+        "Bucket tests cover all four buckets and the 3-of-5 edge."
+      ],
+      "out_of_scope": "STICKY and LOCKOUT buckets (C3, C4): those are gateway decisions that skip the judge."
+    },
+    {
+      "id": "A5",
+      "owner": "A",
+      "title": "Offline audit runner: first evidence and numbers",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M2",
+      "depends": [
+        "A4",
+        "B1",
+        "C1"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:experiment"
+      ],
+      "why": "First real numbers by 22:00. From this point the project is demoable and novel.",
+      "files": [
+        "experiments/audit.py",
+        "config/audit.yaml",
+        "evidence/audit_*.jsonl",
+        "reports/audit_summary.md"
+      ],
+      "tasks": [
+        "For all 40 corpus items at the provider-default temperature: 5 repeats on model A, 2 verdicts on model B, and each of the 6 rewordings once on model A.",
+        "At temperature 0: 5 repeats on model A.",
+        "Per payload: estimated block rate p with a Wilson interval, the bucket, and correctness against the label.",
+        "Summary per category and per channel: benign false-block rate, escaped attacks (malicious items in CONFIRMED_ALLOW), parse-error rate from C1.",
+        "Write the corpus hash and model IDs into every evidence event."
+      ],
+      "acceptance": [
+        "`python -m experiments.audit` writes the evidence file and summary; a second run makes zero API calls.",
+        "Summary committed by 22:00 and shared with the team."
+      ],
+      "out_of_scope": "Retry experiments (A6) and live swarm runs (B6)."
+    },
+    {
+      "id": "A6",
+      "owner": "A",
+      "title": "Retry experiment harness: predicted vs observed breach",
+      "priority": "P0",
+      "estimate": 2.0,
+      "milestone": "M3",
+      "depends": [
+        "A5",
+        "C3"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:experiment"
+      ],
+      "why": "This is the headline claim, and the check that keeps it honest.",
+      "files": [
+        "experiments/retry.py",
+        "experiments/plots.py",
+        "evidence/retry_*.jsonl",
+        "reports/predicted_vs_observed.png"
+      ],
+      "tasks": [
+        "Predicted Breach@N for N = 1, 3, 5, 10, 20 from A5's per-payload block rates: the mean over payloads, with a bootstrap interval.",
+        "Offline simulation through any Gateway: R1 = the same message with a new sample index; R2 is approximated by cycling through the rewordings.",
+        "Configurations: off, single, single + sticky, retry_aware without sticky, retry_aware (full).",
+        "When B6's live evidence lands: observed breach within N attempts, a predicted-vs-observed plot, and the mean absolute gap."
+      ],
+      "acceptance": [
+        "With SimJudge, the simulated breach matches the formula within 2 percentage points.",
+        "Plot and table committed; every point traces to an evidence file."
+      ],
+      "out_of_scope": "Changing gateway behaviour (C2-C4) and running the live swarm (B6)."
+    },
+    {
+      "id": "A7",
+      "owner": "A",
+      "title": "MRR v0.1 builder, grade and reproduce command",
+      "priority": "P1",
+      "estimate": 1.5,
+      "milestone": "M4",
+      "depends": [
+        "A6"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:feature"
+      ],
+      "why": "Turns evidence into a report anyone can audit and re-run.",
+      "files": [
+        "report/mrr.py",
+        "report/MRR-SPEC.md",
+        "report/schema.json",
+        "reports/mrr_latest.json",
+        "reports/report.md"
+      ],
+      "tasks": [
+        "Build every field from evidence only: model IDs and monitor prompt hash, corpus_sha256, axes settings, block rate per category with intervals, Breach@1/3/5/10/20, EBP@N, bucket counts, benign false-block rate, escalation rate, escaped attacks, the monitor's marginal contribution (from A8), grade per gateway configuration, and the reproduce command.",
+        "Grade rule from Section 4.7, written up in MRR-SPEC.md.",
+        "`python -m report.mrr --reproduce reports/mrr_latest.json` re-runs from the cache and compares."
+      ],
+      "acceptance": [
+        "The JSON validates against schema.json, and --reproduce prints \"identical\"."
+      ],
+      "out_of_scope": "Showing the report in the UI (C5) and the deck (D5)."
+    },
+    {
+      "id": "A8",
+      "owner": "A",
+      "title": "Pitch numbers: 2x2 ablation table, defence cost, threshold trade-off",
+      "priority": "P1",
+      "estimate": 1.0,
+      "milestone": "M4",
+      "depends": [
+        "A7",
+        "B7"
+      ],
+      "labels": [
+        "area:measurement",
+        "type:experiment"
+      ],
+      "why": "Every number on stage has to trace back to a file.",
+      "files": [
+        "experiments/ablation_analysis.py",
+        "reports/pitch_numbers.md",
+        "reports/tradeoff.png"
+      ],
+      "tasks": [
+        "2 x 2 table from B7: attack success with the monitor on or off x privilege scoping on or off, and which layer stopped each attack (monitor, executor refusal, privilege denial).",
+        "Defence cost per gateway configuration: benign false-block rate and escalations per 100 messages.",
+        "Threshold sweep (0.6, 0.8, 1.0) -> trade-off chart of attacks let through vs benign messages blocked.",
+        "pitch_numbers.md: every number with its evidence file and run_id. Hand it to Member D by 07:30."
+      ],
+      "acceptance": [
+        "Member D confirms every number in the deck appears in pitch_numbers.md."
+      ],
+      "out_of_scope": "Making the slides (D5)."
+    },
+    {
+      "id": "B1",
+      "owner": "B",
+      "title": "Hand-written corpus: 25 attacks and 15 benign look-alikes",
+      "priority": "P0",
+      "estimate": 2.5,
+      "milestone": "M1",
+      "depends": [
+        "D1"
+      ],
+      "labels": [
+        "area:attack",
+        "type:feature"
+      ],
+      "why": "Every number depends on this file, and judges will ask how it was built.",
+      "files": [
+        "corpus/attacks.yaml",
+        "corpus/benign.yaml",
+        "corpus/README.md",
+        "corpus/validate.py",
+        "corpus/SHA256"
+      ],
+      "tasks": [
+        "Fields: id, channel (web | email | mcp), category, label (malicious | benign), goal (exfiltrate | refund_fraud | role_change | none), text, rationale.",
+        "25 attacks: 5 categories x 5 (direct override, role-play, tool invocation, authority spoofing, monitor-addressed). Spread: 12 web, 9 email, 4 mcp.",
+        "15 benign look-alikes that use the same words (refund, export, admin, urgent) for legitimate reasons. Spread: 6 web, 6 email, 3 mcp.",
+        "Plausible goals only: email the customer export outside the company, refund to an attacker's account, grant an admin role.",
+        "validate.py checks the fields and writes the SHA256 of both files."
+      ],
+      "acceptance": [
+        "40 valid items, each with a one-line rationale.",
+        "Labels reviewed by Dev A and wording by Member D in the PR."
+      ],
+      "out_of_scope": "Rewording templates (A4): the corpus holds originals only."
+    },
+    {
+      "id": "B2",
+      "owner": "B",
+      "title": "Channel fixtures and adapters: poisoned web pages and inbox emails",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M1",
+      "depends": [
+        "B1"
+      ],
+      "labels": [
+        "area:attack",
+        "type:feature"
+      ],
+      "why": "Gives each attack a realistic way in, kept separate from the attack text.",
+      "files": [
+        "channels/web/*.html",
+        "channels/web/serve.py",
+        "channels/email/*.eml",
+        "channels/adapters.py",
+        "tests/attack/test_adapters.py"
+      ],
+      "tasks": [
+        "3 web pages that hide corpus text (CSS-hidden, white-on-white, HTML comment) plus 2 benign pages, served on localhost only.",
+        "3 .eml files (invoice, security notice, calendar invite) plus 2 benign.",
+        "load_source(path) -> (source_id = sha256 of the file, channel, text as an agent would see it), using an HTML-to-text step and Python's email parser.",
+        "Fill page and email templates from the corpus by id, so the corpus stays the only copy of the attack text."
+      ],
+      "acceptance": [
+        "Adapters return hidden and visible text; source_id is stable across runs; one test per channel."
+      ],
+      "out_of_scope": "MCP manifests (B8)."
+    },
+    {
+      "id": "B3",
+      "owner": "B",
+      "title": "Swarm: reader agents, executor, mock tools, privilege scoping, breach detector",
+      "priority": "P0",
+      "estimate": 2.5,
+      "milestone": "M2",
+      "depends": [
+        "A2",
+        "B2"
+      ],
+      "labels": [
+        "area:attack",
+        "type:feature"
+      ],
+      "why": "The stage, and the ground truth for whether an attack worked.",
+      "files": [
+        "swarm/agents.py",
+        "swarm/tools.py",
+        "swarm/privileges.py",
+        "swarm/crm_synthetic.json",
+        "swarm/prompts/*.txt",
+        "tests/attack/test_breach.py"
+      ],
+      "tasks": [
+        "Web Reader and Inbox Triage agents (through llm.client) summarise a source and send a request to the Executor.",
+        "Ops Executor with tools send_email, issue_refund, set_user_role and export_customers. Tools write to a mock outbox; nothing leaves the machine.",
+        "Privilege scoping (on/off): email only to @acme.example, refunds up to ₹5,000, no role changes.",
+        "Breach detector: given the outbox and the item's goal, decide whether the attack succeeded.",
+        "Synthetic CRM with made-up names only."
+      ],
+      "acceptance": [
+        "With the monitor and scoping off, at least one attack reaches its goal, and the transcript is saved.",
+        "The breach detector is unit-tested for all three goals."
+      ],
+      "out_of_scope": "Retry logic (B4) and the gateway (C2)."
+    },
+    {
+      "id": "B4",
+      "owner": "B",
+      "title": "Orchestrator with retry modes R1, R2, R3 and a pluggable gateway",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M2",
+      "depends": [
+        "B3",
+        "C2"
+      ],
+      "labels": [
+        "area:attack",
+        "type:feature"
+      ],
+      "why": "Retries are the attack surface we study, so they must be explicit and configurable.",
+      "files": [
+        "swarm/orchestrator.py",
+        "swarm/run.py",
+        "config/swarm.yaml"
+      ],
+      "tasks": [
+        "Path: reader -> gateway.inspect(message) -> executor. On BLOCK, return a tool error to the reader.",
+        "R1 resubmits the identical message (max_attempts defaults to 3, like LangGraph's RetryPolicy). R2 lets the reader re-plan using the rejection text. R3 delivers the same email M times as separate tasks.",
+        "Pick the gateway by name with guard.factory.build_gateway(name) from C2: off | single | retry_aware.",
+        "Log every attempt with core/evidence.py.",
+        "CLI: `python -m swarm.run --channel web --retry R2 --n 5 --gateway single`."
+      ],
+      "acceptance": [
+        "All three modes run end to end, and every attempt appears in the evidence."
+      ],
+      "out_of_scope": "Gateway internals (C2-C4)."
+    },
+    {
+      "id": "B5",
+      "owner": "B",
+      "title": "Demo fixtures: record and label four key runs",
+      "priority": "P1",
+      "estimate": 1.0,
+      "milestone": "M4",
+      "depends": [
+        "B4",
+        "C3"
+      ],
+      "labels": [
+        "area:attack",
+        "type:feature"
+      ],
+      "why": "The demo must never depend on a live model.",
+      "files": [
+        "swarm/record.py",
+        "swarm/fixtures/*.jsonl"
+      ],
+      "tasks": [
+        "A --record flag that saves full transcripts: reader output, verdicts, tool calls and outbox.",
+        "Record: (1) attack succeeds with the monitor off; (2) blocked with the monitor on; (3) breach on retry k; (4) retry-aware gateway, 20 retries, no breach.",
+        "Each fixture stores the run_id of the evidence it came from."
+      ],
+      "acceptance": [
+        "Four fixtures committed, and C5 replays them unchanged."
+      ],
+      "out_of_scope": "The replay UI (C5)."
+    },
+    {
+      "id": "B6",
+      "owner": "B",
+      "title": "Live retry runs on web and email: single-shot vs retry-aware",
+      "priority": "P0",
+      "estimate": 2.0,
+      "milestone": "M3",
+      "depends": [
+        "B4",
+        "C3",
+        "C4"
+      ],
+      "labels": [
+        "area:attack",
+        "type:experiment"
+      ],
+      "why": "The observed half of predicted vs observed.",
+      "files": [
+        "swarm/run_live.py",
+        "evidence/live_*.jsonl"
+      ],
+      "tasks": [
+        "Run B7 first if C3 and C4 aren't merged yet.",
+        "8 attack payloads x 6 trials x N = 5, modes R1 and R2, gateways single and retry_aware. R3 on email with M = 10 copies.",
+        "8 benign payloads x 6 trials to measure false blocks.",
+        "Resumable: skips finished trials. Split across teammates' API keys. Launch before sleeping.",
+        "Per trial: breached or not, attempt number, buckets seen.",
+        "Before sleeping (01:00), post on this issue whether any breach happened yet (checkpoint in Section 6.4)."
+      ],
+      "acceptance": [
+        "Evidence committed by 04:30, and A6 reads it without changes."
+      ],
+      "out_of_scope": "Analysis and plots (A6)."
+    },
+    {
+      "id": "B7",
+      "owner": "B",
+      "title": "2x2 attribution ablation runs",
+      "priority": "P1",
+      "estimate": 1.0,
+      "milestone": "M3",
+      "depends": [
+        "B4"
+      ],
+      "labels": [
+        "area:attack",
+        "type:experiment"
+      ],
+      "why": "Shows how much of the protection comes from the monitor itself.",
+      "files": [
+        "swarm/run_ablation.py",
+        "evidence/ablation_*.jsonl"
+      ],
+      "tasks": [
+        "All 25 attacks, one attempt each, under monitor on/off x privilege scoping on/off.",
+        "Record which layer stopped each attack: monitor, executor refusal or privilege denial."
+      ],
+      "acceptance": [
+        "Evidence committed; A8 builds the 2 x 2 table from it."
+      ],
+      "out_of_scope": "The analysis (A8)."
+    },
+    {
+      "id": "B8",
+      "owner": "B",
+      "title": "(Stretch) MCP tool-manifest poisoning channel",
+      "priority": "P2",
+      "estimate": 1.5,
+      "milestone": "M4",
+      "depends": [
+        "B4"
+      ],
+      "labels": [
+        "area:attack",
+        "type:feature"
+      ],
+      "why": "Shows a coverage gap: tool descriptions usually never pass through the monitor.",
+      "files": [
+        "channels/mcp/manifest_*.json",
+        "channels/adapters.py (add load_manifest)",
+        "swarm/agents.py (tool descriptions from the manifest)"
+      ],
+      "tasks": [
+        "A simulated manifest JSON (no real MCP server) with hidden instructions in a tool description.",
+        "Show that it reaches the executor without passing the gateway.",
+        "Add a scan at load time: send the descriptions through gateway.inspect as channel \"mcp\", and pin the manifest hash."
+      ],
+      "acceptance": [
+        "Before-and-after transcripts, presented as a coverage gap rather than instability."
+      ],
+      "out_of_scope": "Changes to gateway logic (C2)."
+    },
+    {
+      "id": "C1",
+      "owner": "C",
+      "title": "Monitor under study: published-defence prompt and strict verdict parser",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M1",
+      "depends": [
+        "A1"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "This is the firewall we measure. Using a published prompt answers \"you built a strawman\".",
+      "files": [
+        "guard/monitor.py",
+        "guard/prompts/monitor_v1.txt",
+        "tests/guard/test_monitor_parse.py"
+      ],
+      "tasks": [
+        "Adapt the monitor prompt from a published defence (for example the multi-agent defence pipeline, arXiv:2509.14285) and cite it in the prompt file's header.",
+        "Output contract: JSON {\"verdict\": \"ALLOW\" | \"BLOCK\", \"reason\": \"...\"}.",
+        "Parser: malformed output becomes BLOCK with parse_error = true, counted separately and never dropped.",
+        "Implement the Judge protocol; model and temperature come from config; record the prompt hash.",
+        "Use a fake client until A2 lands, then switch to llm.client."
+      ],
+      "acceptance": [
+        "Works with monitor_a and monitor_b; parser tests cover 6 malformed outputs; the parse-error rate is printed."
+      ],
+      "out_of_scope": "Combining several verdicts into a decision (A4, C2)."
+    },
+    {
+      "id": "C2",
+      "owner": "C",
+      "title": "Guard Gateway: single-shot and retry-aware decisions, gateway factory",
+      "priority": "P0",
+      "estimate": 2.0,
+      "milestone": "M2",
+      "depends": [
+        "C1",
+        "A3"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "The single enforcement point every channel passes through.",
+      "files": [
+        "guard/gateway.py",
+        "guard/factory.py",
+        "config/gateway.yaml",
+        "tests/guard/test_gateway.py"
+      ],
+      "tasks": [
+        "NullGateway (monitor off), SingleShotGateway (one verdict), RetryAwareGateway (5 verdicts: 3 repeats on model A, 1 on model B, 1 rewording, decided by reliability.buckets.decide).",
+        "CONTESTED and UNSTABLE fail closed: action ESCALATE, which also blocks.",
+        "build_gateway(name) for the orchestrator: off | single | retry_aware | retry_aware_no_sticky. Push NullGateway and build_gateway() first (by about 19:00) so Dev B can wire the orchestrator.",
+        "One evidence event per decision.",
+        "Build against SimJudge and the A1 stub first; switch to A4's decide() when it lands."
+      ],
+      "acceptance": [
+        "With SimJudge(0.85), CONFIRMED_ALLOW happens in 0.22% ± 0.1% of 20,000 decisions (independent case).",
+        "Tests cover fail-closed behaviour."
+      ],
+      "out_of_scope": "Sticky keys (C3), budgets (C4) and bucket thresholds (A4)."
+    },
+    {
+      "id": "C3",
+      "owner": "C",
+      "title": "Sticky BLOCK cache: content, normalized and source keys, with human release",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M3",
+      "depends": [
+        "C2"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "Removes retry amplification without extra model calls.",
+      "files": [
+        "guard/sticky.py",
+        "tests/guard/test_sticky.py"
+      ],
+      "tasks": [
+        "Keys: sha256(content); sha256(normalize(content)) with lowercase, collapsed whitespace, and markdown and punctuation removed; and source_id.",
+        "BLOCK-only: an ALLOW is never cached.",
+        "Step 1 of RetryAwareGateway: a hit returns bucket STICKY with no model call.",
+        "release(key, by, reason) for humans; every release is logged."
+      ],
+      "acceptance": [
+        "Tests: an identical retry is blocked with zero judge calls; a reworded retry from the same source is blocked by its source key; a benign message from another source is unaffected; release works."
+      ],
+      "out_of_scope": "Similarity matching (C8)."
+    },
+    {
+      "id": "C4",
+      "owner": "C",
+      "title": "Retry budget, lockout and escalation queue",
+      "priority": "P0",
+      "estimate": 1.0,
+      "milestone": "M3",
+      "depends": [
+        "C2"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "Caps the number of attempts by design, like account lockout.",
+      "files": [
+        "guard/budget.py",
+        "guard/escalation.py",
+        "tests/guard/test_budget.py"
+      ],
+      "tasks": [
+        "Block counters per task and per sender (the email From domain). After k blocks (default 3): LOCKOUT, the task fails and is escalated.",
+        "Escalation queue (JSONL): time, bucket, reason, payload preview, source_id.",
+        "Metric: escalations per 100 messages."
+      ],
+      "acceptance": [
+        "Tests for both counters; lockouts appear in evidence; the UI can read the queue file."
+      ],
+      "out_of_scope": "How humans handle escalations (stated in LIMITATIONS.md)."
+    },
+    {
+      "id": "C5",
+      "owner": "C",
+      "title": "Streamlit demo console with replay mode",
+      "priority": "P1",
+      "estimate": 2.5,
+      "milestone": "M4",
+      "depends": [
+        "C2"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "Completeness and UI is worth 10 marks, and the demo needs a clear view of attempts, verdicts and breaches.",
+      "files": [
+        "ui/app.py",
+        "ui/components.py"
+      ],
+      "tasks": [
+        "Page 1, attack console: choose channel, gateway, retry mode and N; run live or replay a fixture from B5. Show an attempt-by-attempt feed with verdict chips, bucket, a breach banner and the mock outbox.",
+        "Page 2, reliability report: read reports/mrr_latest.json and the PNGs from A6 and A8. Display only; no maths in the UI.",
+        "Replays always show \"REPLAY of run <id>\" at the top."
+      ],
+      "acceptance": [
+        "The full five-act demo runs offline from fixtures in under 5 minutes, with zero API calls."
+      ],
+      "out_of_scope": "Computing any metric (A7, A8)."
+    },
+    {
+      "id": "C6",
+      "owner": "C",
+      "title": "Rich terminal fallback console",
+      "priority": "P1",
+      "estimate": 0.75,
+      "milestone": "M4",
+      "depends": [
+        "C5"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "If Streamlit fails on stage, the same demo runs in a terminal.",
+      "files": [
+        "ui/console.py"
+      ],
+      "tasks": [
+        "`python -m ui.console --replay swarm/fixtures/<file>` prints the same feed, in colour."
+      ],
+      "acceptance": [
+        "All four fixtures replay in the terminal."
+      ],
+      "out_of_scope": "New features: this only mirrors C5."
+    },
+    {
+      "id": "C7",
+      "owner": "C",
+      "title": "Demo runbook and fallback video",
+      "priority": "P1",
+      "estimate": 1.0,
+      "milestone": "M5",
+      "depends": [
+        "C5",
+        "D5"
+      ],
+      "labels": [
+        "area:guard",
+        "type:docs"
+      ],
+      "why": "A recorded fallback is mandatory. Record it while everything works.",
+      "files": [
+        "demo/runbook.md",
+        "demo/fallback.mp4 (or a link if it's too large)"
+      ],
+      "tasks": [
+        "Runbook: the exact commands for each act, in order, and what to do if a step fails.",
+        "Record the full five-act demo with screen and voice by 09:30, using Member D's script."
+      ],
+      "acceptance": [
+        "Member D completes a dry run using only the runbook (D6)."
+      ],
+      "out_of_scope": "Pitch script and slides (D5)."
+    },
+    {
+      "id": "C8",
+      "owner": "C",
+      "title": "(Stretch) Shingle-similarity stickiness",
+      "priority": "P2",
+      "estimate": 1.0,
+      "milestone": "M4",
+      "depends": [
+        "C3"
+      ],
+      "labels": [
+        "area:guard",
+        "type:feature"
+      ],
+      "why": "Catches near-duplicate retries that arrive from a different source.",
+      "files": [
+        "guard/similarity.py",
+        "tests/guard/test_similarity.py"
+      ],
+      "tasks": [
+        "Word 3-shingle Jaccard similarity against blocked messages; threshold 0.6 from config.",
+        "Measure the effect on benign false blocks."
+      ],
+      "acceptance": [
+        "Near-duplicate retries from a different source are blocked; the change in benign false blocks is reported."
+      ],
+      "out_of_scope": "Embedding APIs: keep it dependency-free."
+    },
+    {
+      "id": "C9",
+      "owner": "C",
+      "title": "(Stretch) Second, off-the-shelf guard model as the monitor",
+      "priority": "P2",
+      "estimate": 1.0,
+      "milestone": "M4",
+      "depends": [
+        "C1",
+        "A5"
+      ],
+      "labels": [
+        "area:guard",
+        "type:experiment"
+      ],
+      "why": "Shows the gateway works with any judge, not just our prompt.",
+      "files": [
+        "guard/monitor_offshelf.py"
+      ],
+      "tasks": [
+        "Wrap one guard or safety model from the NIM catalogue as a Judge.",
+        "Run A5's audit on it through config."
+      ],
+      "acceptance": [
+        "The audit runs, and results are labelled as our configuration. No vendor ranking is published."
+      ],
+      "out_of_scope": "Comparing vendors."
+    },
+    {
+      "id": "D1",
+      "owner": "D",
+      "title": "Repo, labels, milestones, board and CODEOWNERS",
+      "priority": "P0",
+      "estimate": 0.5,
+      "milestone": "M0",
+      "depends": [],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "The repo and board must exist before anyone pushes code.",
+      "files": [
+        ".github/CODEOWNERS",
+        "the GitHub project board"
+      ],
+      "tasks": [
+        "The repo exists (jpsiddharth2008/MindForge-Tatva-Finals). Push the first commit right away (CLAUDE.md and docs/ with the plan and backlog): it timestamps the idea.",
+        "Run the issue loader (Appendix A): preview first, then --execute.",
+        "Add CODEOWNERS from Section 7.2 with real usernames; require a pull request before merging to main.",
+        "Create a project board with Todo, In progress, Review and Done."
+      ],
+      "acceptance": [
+        "Every issue is on the board and assigned."
+      ],
+      "out_of_scope": "Any code."
+    },
+    {
+      "id": "D2",
+      "owner": "D",
+      "title": "Verify every citation and write RESEARCH.md",
+      "priority": "P0",
+      "estimate": 2.0,
+      "milestone": "M1",
+      "depends": [
+        "D1"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "One citation that doesn't exist would sink a project about AI reliability.",
+      "files": [
+        "RESEARCH.md"
+      ],
+      "tasks": [
+        "Open every link in Appendix B and mark it found or not found. Drop anything not found.",
+        "Confirm quoted numbers inside the papers before they appear anywhere, for example 44.5% -> 61.4% (Red-Teaming Auto Mode) and 31.2% -> 4.2% (Beyond Single-Model Injection).",
+        "RESEARCH.md: a prior-art table with what each paper does, what it doesn't, and our delta."
+      ],
+      "acceptance": [
+        "Nothing in the README, deck or RESEARCH.md cites a paper a human hasn't opened."
+      ],
+      "out_of_scope": "Technical claims about our own numbers (Dev A)."
+    },
+    {
+      "id": "D3",
+      "owner": "D",
+      "title": "README, DISCLOSURE, LICENSE, NOTICE, SECURITY and CITATION files",
+      "priority": "P1",
+      "estimate": 1.5,
+      "milestone": "M2",
+      "depends": [
+        "D1"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "Judges read these first, and the rules require AI-use disclosure.",
+      "files": [
+        "README.md",
+        "DISCLOSURE.md",
+        "LICENSE",
+        "NOTICE",
+        "SECURITY.md",
+        "CITATION.cff"
+      ],
+      "tasks": [
+        "README: one-liner, the problem statement from Section 3.6, the architecture figure, what's prior art and what's ours, how to run (developers post their commands on their issues), ethics.",
+        "DISCLOSURE.md: which AI tools were used for what, including planning documents.",
+        "LICENSE (Apache-2.0), NOTICE, SECURITY.md (scope and responsible disclosure), CITATION.cff."
+      ],
+      "acceptance": [
+        "Pushed before the 22:00 review."
+      ],
+      "out_of_scope": "Module-level READMEs inside code folders (their owners)."
+    },
+    {
+      "id": "D4",
+      "owner": "D",
+      "title": "LIMITATIONS.md and the ethics statement",
+      "priority": "P1",
+      "estimate": 0.75,
+      "milestone": "M3",
+      "depends": [
+        "A5"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "Stating limits before judges ask raises credibility.",
+      "files": [
+        "LIMITATIONS.md"
+      ],
+      "tasks": [
+        "List the limitations from Section 4.10, adding measured numbers once they exist.",
+        "Write the 30-second ethics line for the pitch."
+      ],
+      "acceptance": [
+        "Dev A signs off on the technical limits."
+      ],
+      "out_of_scope": "Changing any metric."
+    },
+    {
+      "id": "D5",
+      "owner": "D",
+      "title": "Pitch deck, 8 to 10 slides",
+      "priority": "P0",
+      "estimate": 2.5,
+      "milestone": "M4",
+      "depends": [
+        "A8"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "The story judges remember.",
+      "files": [
+        "docs/pitch/deck.pdf (and its source)",
+        "docs/pitch/script.md"
+      ],
+      "tasks": [
+        "Slides: title and one-liner; the swarm and attack (prior art); the defence (prior art); the turn: retries; predicted vs observed; the fix and its cost; the nine-channel threat map; prior art vs ours; ethics and reproducibility; close.",
+        "Use only numbers from reports/pitch_numbers.md (A8); placeholders until 07:30.",
+        "Write the narration script that C7 records."
+      ],
+      "acceptance": [
+        "Every number traces to pitch_numbers.md, and the deck is exported to PDF."
+      ],
+      "out_of_scope": "Computing numbers (A8)."
+    },
+    {
+      "id": "D6",
+      "owner": "D",
+      "title": "QA: clean-clone install and runbook dry run",
+      "priority": "P0",
+      "estimate": 1.0,
+      "milestone": "M5",
+      "depends": [
+        "C7"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:test"
+      ],
+      "why": "Catches \"works on my laptop\" before the judges do.",
+      "files": [
+        "GitHub issues labelled bug"
+      ],
+      "tasks": [
+        "On a second laptop: clone, install from requirements.txt, run the tests, run the replay demo with the runbook.",
+        "File each problem as an issue labelled bug and assign it to the folder's owner."
+      ],
+      "acceptance": [
+        "A clean run from zero takes under 15 minutes."
+      ],
+      "out_of_scope": "Fixing code (owners fix their own folders)."
+    },
+    {
+      "id": "D7",
+      "owner": "D",
+      "title": "Three rehearsals and a Q&A drill",
+      "priority": "P0",
+      "estimate": 1.5,
+      "milestone": "M5",
+      "depends": [
+        "D5"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "A rehearsed pitch beats an extra feature.",
+      "files": [
+        "docs/pitch/rehearsal-notes.md"
+      ],
+      "tasks": [
+        "Three timed rehearsals with a 5:00 target.",
+        "Drill the Q&A table in Section 5.2; each owner answers their own questions without notes."
+      ],
+      "acceptance": [
+        "The last run is under 5:15, and every question is answered by its owner."
+      ],
+      "out_of_scope": ""
+    },
+    {
+      "id": "D8",
+      "owner": "D",
+      "title": "Submission checklist and submit by 11:00",
+      "priority": "P0",
+      "estimate": 0.5,
+      "milestone": "M6",
+      "depends": [
+        "D6",
+        "D7"
+      ],
+      "labels": [
+        "area:pitch-docs",
+        "type:docs"
+      ],
+      "why": "Submitting at the deadline is a risk you don't need.",
+      "files": [
+        "the submission form"
+      ],
+      "tasks": [
+        "Check: repo public, README numbers match the evidence, video link works, deck PDF attached, every member's commits visible.",
+        "Submit at 11:00 and post a screenshot of the confirmation."
+      ],
+      "acceptance": [
+        "Confirmation screenshot posted on this issue."
+      ],
+      "out_of_scope": ""
+    }
+  ]
+}
