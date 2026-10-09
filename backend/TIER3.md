@@ -25,9 +25,9 @@ uniform area is numerical noise.
 
 | | result |
 |---|---|
-| 16 ordinary re-captures (JPEG, shrunk, rotated, dim, blurred, noisy, photographed at an angle) | largest tile distance 8, photo region 6 (of 64) |
+| 22 ordinary re-captures (JPEG, shrunk, rotated, dim, blurred, six different noise samples, photographed at an angle) | largest tile distance 8, photo region 6 (of 64) |
 | 6 other photos in the photo box | photo region 24 to 34, photo tile 12 to 22, every other tile 0 |
-| at the committed thresholds | 16 of 16 re-captures `CONSISTENT`, 6 of 6 swaps `REVIEW` |
+| at the committed thresholds | 22 of 22 re-captures `CONSISTENT`, 6 of 6 swaps `REVIEW` |
 
 ## What it cannot see (known limitations)
 

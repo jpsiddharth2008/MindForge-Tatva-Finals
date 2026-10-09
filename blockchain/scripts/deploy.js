@@ -62,10 +62,14 @@ async function main() {
   const artifact = await hre.artifacts.readArtifact("CredentialRegistry");
   const abiDir = path.join(__dirname, "..", "abi");
   fs.mkdirSync(abiDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(abiDir, "CredentialRegistry.json"),
-    JSON.stringify(artifact.abi, null, 2)
-  );
+  const abiJson = JSON.stringify(artifact.abi, null, 2);
+  fs.writeFileSync(path.join(abiDir, "CredentialRegistry.json"), abiJson);
+  // the backend and the frontend each keep a copy so they work when deployed on their own; a test fails if the copies drift
+  for (const copy of [["backend", "abi"], ["frontend", "src", "abi"]]) {
+    const dir = path.join(__dirname, "..", "..", ...copy);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "CredentialRegistry.json"), abiJson);
+  }
 
   console.log("\nWrote deployments/%s.json and abi/CredentialRegistry.json", hre.network.name);
   console.log("\nAdd to backend/.env:");

@@ -19,7 +19,7 @@ const TRANSITIONS = {
 const DUPLICATE_STATUSES = ['STORED', 'BLOCKCHAIN_PENDING', 'ISSUED', 'REVOKED'];
 
 // Short codes only: a failure reason is never free text, so it can never carry a secret.
-const FAILURE_REASONS = ['S3_FAILED', 'CHAIN_REVERTED', 'WRONG_CONTRACT', 'USER_REJECTED', 'CLIENT_ERROR', 'STUCK_PENDING'];
+const FAILURE_REASONS = ['S3_FAILED', 'CHAIN_REVERTED', 'WRONG_CONTRACT', 'WRONG_DATA', 'USER_REJECTED', 'CLIENT_ERROR', 'STUCK_PENDING'];
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const TX_HASH = /^0x[a-f0-9]{64}$/;
@@ -71,6 +71,10 @@ function buildDocumentModel(connection = mongoose) {
         status: { type: String, enum: STATUSES, default: 'PENDING', index: true },
         failureReason: { type: String, enum: FAILURE_REASONS },
         issuedAt: Date,
+        // Revocation. Mirrors what the chain says: the reason is read from the transaction's calldata and the time from the block.
+        revokedAt: Date,
+        revocationReason: { type: String, maxlength: 500 },
+        revocationTxHash: { type: String, match: TX_HASH },
     }, { timestamps: true, strict: true, strictQuery: true });   // strict: fields not in the schema are dropped, never stored
     return connection.model('Document', schema);
 }
@@ -80,9 +84,9 @@ function publicView(doc) {
     if (!doc) return null;
     const o = typeof doc.toObject === 'function' ? doc.toObject() : doc;
     const { documentId, sha256, contentHash, ocrCheck, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId,
-        contractAddress, transactionHash, blockNumber, issuedAt, createdAt, updatedAt } = o;
+        contractAddress, transactionHash, blockNumber, issuedAt, revokedAt, revocationReason, revocationTxHash, createdAt, updatedAt } = o;
     return { documentId, sha256, contentHash, ocrCheck, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId,
-        contractAddress, transactionHash, blockNumber, issuedAt, createdAt, updatedAt };
+        contractAddress, transactionHash, blockNumber, issuedAt, revokedAt, revocationReason, revocationTxHash, createdAt, updatedAt };
 }
 
 /** Everything the app does with the collection, so routes and tests never touch the model directly. */

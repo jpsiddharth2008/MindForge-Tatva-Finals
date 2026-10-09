@@ -157,3 +157,23 @@ test('ROBUSTNESS: the same certificate in 22 damaged forms is recognised, with n
     assert.strictEqual(verdict(rows), true);
     assert.ok(rows.length >= 22);
 });
+
+test('noise robustness holds across several independent noise samples, not one lucky one: mild noise always matches, heavy noise never raises a false alarm', async () => {
+    const original = await c.render();
+    const outcomes = { mild: [], heavy: [] };
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+        for (const [bucket, sigma] of [['mild', 10], ['heavy', 20]]) {
+            const r = compareToAnchor(ANCHOR.record, ANCHOR.hash, await analyseImage(await c.noise(sigma, seed)(original)));
+            outcomes[bucket].push(r.status);
+        }
+    }
+    assert.ok(outcomes.mild.every((s) => s === 'MATCH'), `mild noise: ${outcomes.mild}`);
+    assert.ok(outcomes.heavy.every((s) => s !== 'MISMATCH'), `heavy noise raised a false alarm: ${outcomes.heavy}`);
+});
+
+test('the test noise really is deterministic: the same seed gives the same pixels, a different seed does not', async () => {
+    const original = await c.render();
+    const sha = async (seed) => c.sha256(await c.noise(10, seed)(original));
+    assert.strictEqual(await sha(1), await sha(1));
+    assert.notStrictEqual(await sha(1), await sha(2));
+});

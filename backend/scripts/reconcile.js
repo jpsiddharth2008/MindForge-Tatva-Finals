@@ -11,7 +11,7 @@ async function main() {
     if (!process.env.MONGODB_URI) { console.error('MONGODB_URI must be set'); return 1; }
     const documents = await connectDocuments(process.env.MONGODB_URI);
     try {
-        const chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL }) : null;
+        const chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL, chainId: Number(process.env.CHAIN_ID) || undefined, contractAddress: process.env.CONTRACT_ADDRESS || undefined }) : null;
         const issuance = createIssuance({ documents, storage: null, chain, contractAddress: process.env.CONTRACT_ADDRESS || undefined });
         const report = await issuance.reconcile();
         console.log(JSON.stringify(report, null, 2));

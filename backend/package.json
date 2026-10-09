@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "node --test --test-concurrency=4 \"test/**/*.test.js\"",
     "hash-password": "node scripts/hash-password.js",
     "check-bucket": "node scripts/check-bucket.js",
     "reconcile": "node scripts/reconcile.js",

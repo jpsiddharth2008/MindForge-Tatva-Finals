@@ -4,10 +4,10 @@
   "wholeFar": 8,
   "maxLocalisedCells": 2,
   "calibration": {
-    "measuredOn": "2026-10-10, sharp 0.35.5",
+    "measuredOn": "2026-10-10, sharp 0.35.5, seeded noise (6 samples)",
     "how": "npm run calibrate-tier3",
     "data": "SIMULATED captures of one synthetic certificate with procedural photos. Not real phones, not real cards, not real forgeries.",
-    "reCaptures": 16,
+    "reCaptures": 22,
     "reCaptureLargestTile": 8,
     "reCapturePhotoRegionLargest": 6,
     "reCaptureWholePageLargest": 2,
