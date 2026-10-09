@@ -1,0 +1,27 @@
+# NVIDIA NIM model pins for "Who Guards the Guard?"
+# Verified live against https://integrate.api.nvidia.com/v1/chat/completions
+# on 2026-10-09 (checked_on below). Each returned real instruction-following
+# content, not just a 200 status -- see A2 issue comments for the raw sweep.
+#
+# Many catalog models 404 ("Function ... Not found for account") until someone
+# opens the model's page on build.nvidia.com and clicks "Try API". These two
+# worked without that step.
+
+provider: nvidia_nim
+base_url: https://integrate.api.nvidia.com/v1
+checked_on: "2026-10-09"
+
+models:
+  monitor_a: meta/llama-3.2-11b-vision-instruct       # family: Llama (Meta)
+  monitor_b: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning  # family: Nemotron (NVIDIA) -- different family, required for Axis 2
+  agent: meta/llama-3.2-11b-vision-instruct           # reused for speed; swap if Dev B needs something smaller
+
+rate_limit:
+  requests_per_minute: 35  # plan default (plan says ~40 shared/key). NOT personally confirmed
+                            # against the account dashboard yet -- that's A2's own research task,
+                            # still open, comment the confirmed number on D2 before relying on this.
+
+backup:
+  provider: null  # Groq or Gemini, per plan section 4.8
+  base_url: null
+  note: "Not configured -- no backup key available yet. Add one before long live runs if NIM rate limits bite."
