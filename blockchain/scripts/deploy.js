@@ -70,7 +70,7 @@ async function main() {
   console.log("\nWrote deployments/%s.json and abi/CredentialRegistry.json", hre.network.name);
   console.log("\nAdd to backend/.env:");
   console.log("  CONTRACT_ADDRESS=%s", address);
-  console.log("  POLYGON_CHAIN_ID=%s", net.chainId);
+  console.log("  POLYGON_CHAIN_ID=%s", Number(net.chainId));
 
   // ---- verify source on the explorer -------------------------------------
   if (hre.network.name === "amoy" || hre.network.name === "sepolia") {
