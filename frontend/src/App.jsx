@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
-import axios from 'axios';
+import { login, clearToken, hashFile, anchorFile } from './api';
 import { UploadCloud, ShieldCheck, Lock, User, Briefcase, Search } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -26,7 +26,7 @@ const PublicVerification = ({ goBack }) => {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await axios.post("http://localhost:5000/api/hash", formData);
+      const res = await hashFile(formData);
       const autoHash = res.data.hash;
 
       if (!window.ethereum) return alert("Please install MetaMask!");
@@ -112,10 +112,13 @@ const OfficerUpload = ({ goBack }) => {
     formData.append("file", file);
 
     try {
-      const res = await axios.post("http://localhost:5000/api/anchor", formData);
+      const res = await anchorFile(formData);
       setHash(res.data.hash);
       setStatus("Cloud Upload Complete.");
-    } catch (err) { setStatus("Upload Failed."); }
+    } catch (err) {
+      if (err.response?.status === 401) { goBack(); return; }   // session expired: back to the login screen
+      setStatus("Upload Failed.");
+    }
   };
 
   // blockchain interaction
@@ -180,12 +183,26 @@ const OfficerUpload = ({ goBack }) => {
 // 3. MAIN HOME SCREEN (Matches your "MindForge" dual card image)
 function App() {
   const [view, setView] = useState('home');
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = () => {
-    if (password === "admin123") setView('officer-upload');
-    else alert("Incorrect PIN");
+  const handleLogin = async () => {
+    setBusy(true);
+    setLoginError("");
+    try {
+      await login(username, password);          // the server checks the password, never this file
+      setPassword("");
+      setView('officer-upload');
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const handleLogout = () => { clearToken(); setUsername(""); setPassword(""); setView('home'); };
 
   return (
     <>
@@ -219,17 +236,28 @@ function App() {
               <h2 className="text-2xl font-bold mb-2">Officer Portal</h2>
               <p className="text-slate-400 mb-6 text-sm">Verify documents and audit records. (Restricted Access)</p>
               
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  placeholder="Officer username"
+                  autoComplete="username"
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white w-full focus:outline-none focus:border-blue-500"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
                 <input 
                   type="password" 
-                  placeholder="Enter Officer PIN" 
+                  placeholder="Password"
+                  autoComplete="current-password" 
                   className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white w-full focus:outline-none focus:border-blue-500"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              <button onClick={handleLogin} className="w-full mt-3 bg-slate-200 text-slate-900 py-3 rounded-lg font-bold hover:bg-white transition">
-                Verify Identity
+              {loginError && <p role="alert" className="text-red-400 text-sm mt-2">{loginError}</p>}
+              <button onClick={handleLogin} disabled={busy || !username || !password}
+                className="w-full mt-3 bg-slate-200 text-slate-900 py-3 rounded-lg font-bold hover:bg-white transition disabled:opacity-50">
+                {busy ? "Checking..." : "Verify Identity"}
               </button>
             </div>
 
@@ -238,7 +266,7 @@ function App() {
       )}
 
       {view === 'public-verify' && <PublicVerification goBack={() => setView('home')} />}
-      {view === 'officer-upload' && <OfficerUpload goBack={() => { setView('home'); setPassword(""); }} />}
+      {view === 'officer-upload' && <OfficerUpload goBack={handleLogout} />}
     </>
   );
 }

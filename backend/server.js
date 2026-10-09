@@ -15,6 +15,18 @@ const s3 = new S3Client({
     }
 });
 
-const app = createApp({ s3, bucketName: BUCKET_NAME, region: REGION });
+const auth = {
+    jwtSecret: process.env.JWT_SECRET,
+    adminUsername: process.env.ADMIN_USERNAME,
+    adminPasswordHash: process.env.ADMIN_PASSWORD_HASH,
+};
+
+let app;
+try {
+    app = createApp({ s3, bucketName: BUCKET_NAME, region: REGION, auth });
+} catch (err) {
+    console.error(err.message);   // config errors name the missing setting, never its value
+    process.exit(1);
+}
 
 app.listen(5000, () => console.log("MindForge AWS Backend running on port 5000"));

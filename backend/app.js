@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const crypto = require('crypto');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { createAuth } = require('./auth');
 
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
@@ -12,11 +13,15 @@ const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('he
  *
  * Verification and issuance are separate routes on purpose:
  * - POST /api/hash   hashes in memory and stores NOTHING. Used to check a suspect file.
- * - POST /api/anchor hashes and stores in S3. Used by the issuing officer before the chain write.
+ * - POST /api/anchor hashes and stores in S3. Used by the issuing officer before the chain write. Requires login.
+ * - POST /api/auth/login exchanges the issuer's credentials for a short-lived token.
  */
-function createApp({ s3, bucketName, region }) {
+function createApp({ s3, bucketName, region, auth: authConfig }) {
+    // Fails closed: the app cannot be built without a valid auth configuration.
+    const auth = createAuth(authConfig);
     const app = express();
     app.use(cors());
+    app.use(express.json({ limit: '10kb' }));
 
     // File Handling
     const upload = multer({ storage: multer.memoryStorage() });
@@ -29,9 +34,17 @@ function createApp({ s3, bucketName, region }) {
         res.json({ success: true, hash: sha256(file.buffer) });
     });
 
+    // --- ROUTE: Issuer login ---
+    app.post('/api/auth/login', async (req, res) => {
+        const { username, password } = req.body || {};
+        const token = await auth.login(username, password);
+        if (!token) return res.status(401).json({ success: false, error: 'Invalid credentials.' });
+        res.json({ success: true, token });
+    });
+
     // --- ROUTE: Hash & store (issuance) ---
-    // TODO(#48): restrict to authenticated issuers once real auth lands.
-    app.post('/api/anchor', upload.single('file'), async (req, res) => {
+    // Issuers only: requires a valid bearer token.
+    app.post('/api/anchor', auth.requireAuth, upload.single('file'), async (req, res) => {
         try {
             const file = req.file;
             if (!file) return res.status(400).send("No file.");
