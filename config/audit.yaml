@@ -1,0 +1,9 @@
+# Settings for python -m experiments.audit (A5). Models come from config/models.yaml.
+corpus_dir: corpus            # attacks.yaml + benign.yaml (Dev B)
+evidence_dir: evidence
+reports_dir: reports
+seed: 0                       # recorded in every evidence event
+default_temperature: 1.0      # "provider default" pass; the OpenAI-compatible API default is 1.0
+repeats: 5                    # repeat verdicts on model A
+model_b_samples: 2            # verdicts on model B
+rewordings: 6                 # each rewording once on model A
