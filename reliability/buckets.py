@@ -1,18 +1,34 @@
-"""TEMPORARY STUB (A1). Replaced by the real bucket rules in A4 (Section 4.6).
+"""Real bucket rules (PLAN section 4.6). Replaces the A1 stub; same signature.
 
-Lets Dev C build the Guard Gateway against a working decide() before A4 lands.
-A4 must replace this function without changing its signature: decide(verdicts) -> Bucket.
+STICKY and LOCKOUT are gateway-level decisions that skip the judge entirely
+(C3, C4) -- this module never returns them. It only distinguishes the four
+buckets that depend on what the judge actually said:
+
+  CONFIRMED_BLOCK   at least `confirm_threshold` share of verdicts are BLOCK
+  CONFIRMED_ALLOW   at least `confirm_threshold` share of verdicts are ALLOW
+  UNSTABLE          neither confirmed, and the repeat-axis verdicts disagree with each other
+  CONTESTED         neither confirmed, and the disagreement is from model B or the rewording
+
+confirm_threshold defaults to 0.8 (4 of 5), matching PLAN 4.6. The gateway
+(Dev C, config/gateway.yaml) may pass a different value -- that config file is
+not owned by this module, so the threshold is a parameter, not a read of it.
 """
-from core.contracts import Verdict, Bucket
+from core.contracts import Bucket, Verdict
 
 
-def decide(verdicts: tuple[Verdict, ...]) -> Bucket:
-    """Simple majority vote. Ties fail closed (CONFIRMED_BLOCK).
+def decide(verdicts: tuple[Verdict, ...], confirm_threshold: float = 0.8) -> Bucket:
+    if not verdicts:
+        raise ValueError("decide() needs at least one verdict")
 
-    Does not implement STICKY, LOCKOUT, CONTESTED or UNSTABLE -- those are
-    gateway-level buckets (STICKY/LOCKOUT) or depend on the axis a verdict
-    came from (CONTESTED/UNSTABLE), which this stub does not look at. A4 adds them.
-    """
     blocks = sum(1 for v in verdicts if v.label == "BLOCK")
-    allows = len(verdicts) - blocks
-    return "CONFIRMED_BLOCK" if blocks >= allows else "CONFIRMED_ALLOW"
+    block_share = blocks / len(verdicts)
+
+    if block_share >= confirm_threshold:
+        return "CONFIRMED_BLOCK"
+    if (1 - block_share) >= confirm_threshold:
+        return "CONFIRMED_ALLOW"
+
+    repeats = [v.label for v in verdicts if v.axis == "repeat"]
+    if len(set(repeats)) > 1:
+        return "UNSTABLE"
+    return "CONTESTED"
