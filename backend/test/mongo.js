@@ -7,7 +7,7 @@ async function startMongo({ fastTtl = false, retentionDays, logger } = {}) {
     const args = fastTtl ? ['--setParameter', 'ttlMonitorSleepSecs=1'] : [];
     const mongod = await MongoMemoryServer.create({ instance: { args } });
     const db = await connectDatabase(mongod.getUri(), { retentionDays, logger });
-    return { documents: { ...db.documents, close: db.close }, audit: db.audit, stop: async () => { await db.close(); await mongod.stop(); } };
+    return { uri: mongod.getUri(), documents: { ...db.documents, close: db.close }, audit: db.audit, stop: async () => { await db.close(); await mongod.stop(); } };
 }
 
 module.exports = { startMongo };

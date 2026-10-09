@@ -73,15 +73,12 @@ test('maskIp keeps enough to spot abuse but not to identify a person', () => {
     for (const bad of [undefined, null, '', 'not an ip', 42]) assert.strictEqual(maskIp(bad), undefined, String(bad));
 });
 
-test('a failing database never breaks auditing\'s caller: record() returns false and logs a warning with no secrets', async () => {
+test('a failing database never breaks the caller of audit: record() returns false and logs a warning with no secrets', async () => {
     const { logger, lines } = memoryLogger();
-    const { MongoMemoryServer } = require('mongodb-memory-server');
     const { connectDatabase } = require('../db');
-    const m = await MongoMemoryServer.create();
-    const db = await connectDatabase(m.getUri(), { logger });
-    await db.close();                                                   // the connection is gone
+    const db = await connectDatabase(mongo.uri, { logger });          // a second connection to the shared test server
+    await db.close();                                                   // ...which we then close: the database is "gone"
     const ok = await db.audit.record({ action: 'LOGIN', outcome: 'SUCCESS', actorName: 'registrar', ip: '203.0.113.5' });
-    await m.stop();
     assert.strictEqual(ok, false);
     assert.ok(lines.join('\n').includes('could not write audit event'));
 });

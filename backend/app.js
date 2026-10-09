@@ -9,6 +9,8 @@ const { createStorage, presignTtlFromEnv, sseFromEnv } = require('./storage');
 const { publicView } = require('./documents');
 const { createIssuance } = require('./issuance');
 const { createChain } = require('./chain');
+const { analyseImage, compareToAnchor } = require('./tier2');
+const { contentHash: computeContentHash, lookupKey: computeLookupKey, FieldError } = require('./content-hash');
 const { ACTIONS, OUTCOMES } = require('./audit');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
@@ -40,6 +42,7 @@ function createApp({
     chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL }) : null,   // read-only chain access; confirms transactions
     issuanceOptions = {},                      // staleMs / stuckMs / now, for tests
     audit,                                     // audit trail (audit.js). Without it, events are not recorded.
+    analyse = analyseImage,                    // reads a document image (Tier 2); replaced in tests
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -94,6 +97,36 @@ function createApp({
         res.json({ success: true, token });
     });
 
+    /**
+     * The document's details as the issuer entered them (a JSON "fields" text field next to the file), turned into the Tier 2
+     * hash. For images the printed text is read back and compared: if it CONFIDENTLY disagrees with what was entered, issuance
+     * is refused (otherwise the genuine document could never verify). PDFs are not read in this version.
+     * @returns {Promise<null | {contentHash, lookupKey, record, ocrCheck}>}  null when no fields were sent (Tier 1 only)
+     */
+    async function tier2For(req, file, hash) {
+        const raw = req.body && req.body.fields;
+        if (raw === undefined || raw === '') return null;
+        let parsed;
+        try { parsed = JSON.parse(raw); } catch { throw Object.assign(new Error('bad fields'), { status: 400, publicMessage: 'The document details must be valid JSON.' }); }
+        let computed;
+        try { computed = computeContentHash(parsed); } catch (err) {
+            if (!(err instanceof FieldError)) throw err;
+            const names = err.fields.length ? ` (${err.fields.join(', ')})` : '';
+            throw Object.assign(new Error('bad fields'), { status: 400, publicMessage: `The document details are incomplete or unreadable${names}.` });
+        }
+        let ocrCheck = 'SKIPPED';
+        if (file.detectedMime !== 'application/pdf') {
+            const result = compareToAnchor(computed.record, computed.hash, await analyse(file.buffer));
+            if (result.status === 'MISMATCH') {
+                await record(req, { action: 'ISSUE', outcome: 'FAILED', reason: 'DETAILS_MISMATCH', actorName: req.user.sub });
+                const list = result.fieldDiffs.map((d) => `${d.field} (entered ${d.anchored === null ? 'nothing' : d.anchored}, printed ${d.presented === null ? 'nothing' : d.presented})`).join('; ');
+                throw Object.assign(new Error('details mismatch'), { status: 422, publicMessage: `The details entered do not match the document: ${list}.` });
+            }
+            ocrCheck = result.status === 'MATCH' ? 'MATCH' : 'INCONCLUSIVE';
+        }
+        return { contentHash: computed.hash, lookupKey: computeLookupKey(computed.record), record: computed.record, ocrCheck };
+    }
+
     // --- ROUTE: Hash & store (issuance) ---
     // Issuers only: requires a valid bearer token.
     app.post('/api/anchor', fileLimit, auth.requireAuth, ...uploadFile, async (req, res, next) => {
@@ -107,9 +140,10 @@ function createApp({
             // 2a. With a database: the record is claimed (PENDING) before the upload, an identical file is never issued
             //     twice, and every step leaves the record in a state that can be recovered (see issuance.js).
             if (issuance) {
+                const tier2 = await tier2For(req, file, hash);
                 const r = await issuance.issue({
                     hash, buffer: file.buffer, contentType: file.detectedMime, originalName: file.safeName,
-                    size: file.size, issuerName: req.user.sub,
+                    size: file.size, issuerName: req.user.sub, tier2,
                 });
                 if (r.outcome === 'in_progress') {
                     return res.json({ success: true, duplicate: true, inProgress: true, hash, s3Key: r.key, document: publicView(r.document),
@@ -120,9 +154,12 @@ function createApp({
                 await record(req, { action: 'ISSUE', outcome: 'SUCCESS', reason: duplicate ? 'DUPLICATE' : 'STORED',
                     actorName: req.user.sub, documentId: r.document.documentId });
                 return res.json({
-                    success: true, duplicate, hash, s3Key: r.key, url, urlExpiresInSeconds: expiresInSeconds,
+                    success: true, duplicate, duplicateOf: duplicate ? (r.by || 'file') : undefined, hash,
+                    contentHash: r.document.contentHash,                        // Tier 2: anchor this together with `hash`
+                    s3Key: r.key, url, urlExpiresInSeconds: expiresInSeconds,
                     alreadyStored: duplicate ? true : r.alreadyStored, document: publicView(r.document),
-                    message: duplicate ? "This exact document was already stored. Nothing was written."
+                    message: duplicate ? (r.by === 'content' ? "This document was already issued (a different copy of the same document). Nothing was written."
+                        : "This exact document was already stored. Nothing was written.")
                         : (r.alreadyStored ? "This exact file was already stored." : "File stored in AWS S3. Hash generated."),
                 });
             }

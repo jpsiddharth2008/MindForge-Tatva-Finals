@@ -50,7 +50,7 @@ function singleFileUpload({ maxFileSizeMb = maxMbFromEnv() } = {}) {
     const multerMw = multer({
         storage: multer.memoryStorage(),
         // +1 because busboy stops AT the limit and flags a file of exactly maxBytes as too large; the exact check is below
-        limits: { fileSize: maxBytes + 1, files: 1, fields: 5, parts: 8 },
+        limits: { fileSize: maxBytes + 1, files: 1, fields: 5, parts: 8, fieldSize: 16 * 1024 },   // fieldSize: the JSON "fields" text
         fileFilter: (req, file, cb) => {
             // The declared type is attacker-controlled: this only rejects the obvious early. Magic bytes decide.
             if (!ALLOWED[file.mimetype]) return cb(new UploadError(400, `Unsupported file type. ${ALLOWED_TEXT}`));
@@ -64,6 +64,7 @@ function singleFileUpload({ maxFileSizeMb = maxMbFromEnv() } = {}) {
         if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
             return next(tooLarge());
         }
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FIELD_VALUE') return next(new UploadError(400, 'The document details are too long.'));
         if (err instanceof multer.MulterError) return next(new UploadError(400, 'Upload must be a single file in the "file" field.'));
         next(err);
     });

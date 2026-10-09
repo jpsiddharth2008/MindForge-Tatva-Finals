@@ -43,10 +43,22 @@ function createIssuance({
 
     /**
      * Step 1-2: claim the hash, upload to S3, mark STORED.
+     * `tier2` (optional): { contentHash, lookupKey, record, ocrCheck } for the document's content. A second file with the same
+     * content hash is the SAME document re-captured (a new photo, a scan): it is reported as a duplicate, never issued again.
      * @returns {{outcome: 'issued'|'duplicate'|'in_progress', document, key, alreadyStored?}}
      */
-    async function issue({ hash, buffer, contentType, originalName, size, issuerName }) {
+    async function issue({ hash, buffer, contentType, originalName, size, issuerName, tier2 }) {
         let doc = await documents.findBySha256(hash);
+
+        if (!doc && tier2) {
+            const same = await documents.findByContentHash(tier2.contentHash);
+            if (same) {
+                if (DUPLICATE_STATUSES.includes(same.status)) return { outcome: 'duplicate', document: same, key: same.s3Key, by: 'content' };
+                // another request for this same document is working on it right now (another copy of it, uploaded at once)
+                if (same.status === 'PENDING' && now() - new Date(same.updatedAt).getTime() < staleMs) return { outcome: 'in_progress', document: same, key: same.s3Key };
+                throw new IssuanceError(409, 'An earlier attempt to issue this document is unfinished. Retry with the original file.');
+            }
+        }
 
         if (doc && DUPLICATE_STATUSES.includes(doc.status)) return { outcome: 'duplicate', document: doc, key: doc.s3Key };
 
@@ -64,10 +76,12 @@ function createIssuance({
                 doc = await documents.create({
                     sha256: hash, byteHash: hash, s3Key: hash, originalFileName: originalName, mimeType: contentType,
                     size, issuerName, chainId, contractAddress, status: 'PENDING',
+                    ...(tier2 ? { contentHash: tier2.contentHash, lookupKey: tier2.lookupKey, canonicalRecord: tier2.record, ocrCheck: tier2.ocrCheck } : {}),
                 });
             } catch (err) {
                 if (!(err instanceof DuplicateDocumentError)) throw err;
-                const winner = await documents.findBySha256(hash);          // lost the race to another request
+                const winner = await documents.findBySha256(hash)
+                    || (err.field === 'contentHash' && await documents.findByContentHash(err.contentHash));   // lost the race to another request
                 return DUPLICATE_STATUSES.includes(winner.status)
                     ? { outcome: 'duplicate', document: winner, key: winner.s3Key }
                     : { outcome: 'in_progress', document: winner, key: winner.s3Key };

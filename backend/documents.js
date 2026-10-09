@@ -26,10 +26,13 @@ const TX_HASH = /^0x[a-f0-9]{64}$/;
 const ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 
 class DuplicateDocumentError extends Error {
-    constructor(sha256) {
-        super('A document with this SHA-256 already exists');
+    /** @param {string} value the duplicated hash; @param {'sha256'|'contentHash'} field which one collided */
+    constructor(value, field = 'sha256') {
+        super(field === 'contentHash' ? 'A document with this content hash already exists' : 'A document with this SHA-256 already exists');
         this.name = 'DuplicateDocumentError';
-        this.sha256 = sha256;
+        this.field = field;
+        this.sha256 = field === 'sha256' ? value : undefined;
+        this.contentHash = field === 'contentHash' ? value : undefined;
     }
 }
 
@@ -45,6 +48,13 @@ function buildDocumentModel(connection = mongoose) {
         documentId: { type: String, required: true, unique: true, index: true, default: () => crypto.randomUUID() },
         sha256: { type: String, required: true, unique: true, index: true, match: SHA256 },   // the join key: S3 key and on-chain hash
         byteHash: { type: String, match: SHA256 },
+        // Tier 2: the hash of what the document SAYS, so a re-photographed copy is recognised as the same document.
+        contentHash: { type: String, match: SHA256, unique: true, sparse: true },
+        lookupKey: { type: String, match: SHA256, index: true },   // finds "this person's document of this type" even when a field was altered
+        // The anchored fields in canonical form. They hold personal data (name, date of birth, ID number) and exist so a
+        // mismatch can say WHICH field changed, old against new. Never sent to clients in publicView(); issuers only.
+        canonicalRecord: mongoose.Schema.Types.Mixed,
+        ocrCheck: { type: String, enum: ['MATCH', 'INCONCLUSIVE', 'SKIPPED'] },   // did the printed text agree with the fields entered?
         s3Key: { type: String, required: true },
         originalFileName: String,                     // sanitised name, metadata only
         mimeType: { type: String, enum: ['application/pdf', 'image/png', 'image/jpeg'] },
@@ -66,10 +76,10 @@ function buildDocumentModel(connection = mongoose) {
 function publicView(doc) {
     if (!doc) return null;
     const o = typeof doc.toObject === 'function' ? doc.toObject() : doc;
-    const { documentId, sha256, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId, contractAddress,
-        transactionHash, blockNumber, issuedAt, createdAt, updatedAt } = o;
-    return { documentId, sha256, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId, contractAddress,
-        transactionHash, blockNumber, issuedAt, createdAt, updatedAt };
+    const { documentId, sha256, contentHash, ocrCheck, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId,
+        contractAddress, transactionHash, blockNumber, issuedAt, createdAt, updatedAt } = o;
+    return { documentId, sha256, contentHash, ocrCheck, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId,
+        contractAddress, transactionHash, blockNumber, issuedAt, createdAt, updatedAt };
 }
 
 /** Everything the app does with the collection, so routes and tests never touch the model directly. */
@@ -88,6 +98,7 @@ function createDocuments(Document) {
                 if (err && err.code === 11000) {
                     const dup = Object.keys(err.keyPattern || {})[0];
                     if (dup === 'sha256' || dup === undefined) throw new DuplicateDocumentError(fields.sha256);
+                    if (dup === 'contentHash') throw new DuplicateDocumentError(fields.contentHash, 'contentHash');
                 }
                 throw err;
             }
@@ -95,6 +106,9 @@ function createDocuments(Document) {
 
         findByDocumentId: (documentId) => lean(Document.findOne({ documentId: String(documentId) })),
         findBySha256: (sha256) => lean(Document.findOne({ sha256: String(sha256) })),
+        findByContentHash: (contentHash) => lean(Document.findOne({ contentHash: String(contentHash) })),
+        /** Every document of this issuer / type / ID, newest first (a document can be re-issued). */
+        findByLookupKey: (lookupKey) => lean(Document.find({ lookupKey: String(lookupKey) }).sort({ createdAt: -1 })),
         findByTransactionHash: (transactionHash) => lean(Document.findOne({ transactionHash: String(transactionHash).toLowerCase() })),
 
         /**
