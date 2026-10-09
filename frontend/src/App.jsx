@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
-import axios from 'axios';
+import { login, clearToken, hashFile, anchorFile, chainPending, chainConfirmed, chainFailed } from './api';
 import { UploadCloud, ShieldCheck, Lock, User, Briefcase, Search } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -26,7 +26,7 @@ const PublicVerification = ({ goBack }) => {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await axios.post("http://localhost:5000/api/hash", formData);
+      const res = await hashFile(formData);
       const autoHash = res.data.hash;
 
       if (!window.ethereum) return alert("Please install MetaMask!");
@@ -103,41 +103,74 @@ const OfficerUpload = ({ goBack }) => {
   // cloud interaction
   const [file, setFile] = useState(null);
   const [hash, setHash] = useState("");
+  const [doc, setDoc] = useState(null);       // the server's record of this document, including its status
   const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);    // true while a request or wallet step is in flight: blocks double clicks
+
+  // Only a stored document that has not started (or already finished) the chain step can be signed.
+  const canSign = doc?.status === 'STORED' || doc?.status === 'FAILED';
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || busy) return;
+    setBusy(true);
     setStatus("Uploading to Cloud Vault...");
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const res = await axios.post("http://localhost:5000/api/anchor", formData);
+      const res = await anchorFile(formData);
       setHash(res.data.hash);
-      setStatus("Cloud Upload Complete.");
-    } catch (err) { setStatus("Upload Failed."); }
+      setDoc(res.data.document);
+      const s = res.data.document?.status;
+      if (res.data.inProgress) setStatus("This document is already being processed. Try again shortly.");
+      else if (res.data.duplicate && s === 'ISSUED') setStatus("This document is already issued on the blockchain. Nothing more to do.");
+      else if (res.data.duplicate && s === 'BLOCKCHAIN_PENDING') setStatus("A blockchain transaction for this document is already in progress.");
+      else setStatus("Cloud Upload Complete.");
+    } catch (err) {
+      if (err.response?.status === 401) { goBack(); return; }   // session expired: back to the login screen
+      setStatus("Upload Failed.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   // blockchain interaction
   const saveToBlockchain = async () => {
+    if (busy || !canSign) return;
+    setBusy(true);
     setStatus("Requesting Wallet Signature...");
+    let tx = null;
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-      
-      const tx = await contract.addDocument(hash);
+
+      tx = await contract.addDocument(hash);
+      setDoc(await chainPending(doc.documentId, tx.hash).then((r) => r.document));   // server records the transaction
       setStatus("Mining Transaction...");
       await tx.wait();
-      
-      setStatus(`🎉 SUCCESS! Document Registered.`);
+
+      // the server checks the chain itself before calling the document issued
+      const result = await chainConfirmed(doc.documentId, tx.hash);
+      setDoc(result.document);
+      if (result.state === 'issued') setStatus("🎉 SUCCESS! Document Registered.");
+      else if (result.state === 'pending') setStatus("Transaction sent but not confirmed yet. It will be checked again later.");
+      else setStatus("The blockchain rejected this transaction. You can try again.");
     } catch (err) {
+      if (err.response?.status === 401) { goBack(); return; }
       if (JSON.stringify(err).includes("Document already exists")) {
         alert("⚠️ WARNING: This document is ALREADY registered!");
-        window.location.reload(); 
+        window.location.reload();
         return;
       }
-      setStatus("Error: " + err.message);
+      // No transaction was sent (rejected in the wallet, or it failed before sending): record that so the record is not left half-issued.
+      if (!tx && doc?.documentId) {
+        const reason = err?.code === 'ACTION_REJECTED' ? 'USER_REJECTED' : 'CLIENT_ERROR';
+        chainFailed(doc.documentId, reason).then((r) => setDoc(r.document)).catch(() => {});
+      }
+      setStatus(err?.code === 'ACTION_REJECTED' ? "Signature rejected in the wallet." : "Error: " + (err.shortMessage || err.message));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -160,15 +193,18 @@ const OfficerUpload = ({ goBack }) => {
             />
           </div>
 
-          <button onClick={handleUpload} className="w-full bg-[#111827] text-white py-3 rounded-lg font-bold mb-3 hover:bg-black transition">
+          <button onClick={handleUpload} disabled={busy || !file}
+            className="w-full bg-[#111827] text-white py-3 rounded-lg font-bold mb-3 hover:bg-black transition disabled:opacity-50">
             1. Upload to Cloud Vault
           </button>
 
           {hash && (
-            <button onClick={saveToBlockchain} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition flex justify-center items-center gap-2">
+            <button onClick={saveToBlockchain} disabled={busy || !canSign}
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition flex justify-center items-center gap-2 disabled:opacity-50">
               <Lock className="w-4 h-4"/> 2. Sign & Issue on Chain
             </button>
           )}
+          {doc && <p className="mt-3 text-center text-xs text-slate-500">Status: {doc.status}{doc.failureReason ? ` (${doc.failureReason})` : ""}</p>}
 
           {status && <p className="mt-4 text-center text-slate-600 font-medium">{status}</p>}
         </div>
@@ -180,12 +216,26 @@ const OfficerUpload = ({ goBack }) => {
 // 3. MAIN HOME SCREEN (Matches your "MindForge" dual card image)
 function App() {
   const [view, setView] = useState('home');
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = () => {
-    if (password === "admin123") setView('officer-upload');
-    else alert("Incorrect PIN");
+  const handleLogin = async () => {
+    setBusy(true);
+    setLoginError("");
+    try {
+      await login(username, password);          // the server checks the password, never this file
+      setPassword("");
+      setView('officer-upload');
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const handleLogout = () => { clearToken(); setUsername(""); setPassword(""); setView('home'); };
 
   return (
     <>
@@ -219,17 +269,28 @@ function App() {
               <h2 className="text-2xl font-bold mb-2">Officer Portal</h2>
               <p className="text-slate-400 mb-6 text-sm">Verify documents and audit records. (Restricted Access)</p>
               
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  placeholder="Officer username"
+                  autoComplete="username"
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white w-full focus:outline-none focus:border-blue-500"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
                 <input 
                   type="password" 
-                  placeholder="Enter Officer PIN" 
+                  placeholder="Password"
+                  autoComplete="current-password" 
                   className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white w-full focus:outline-none focus:border-blue-500"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              <button onClick={handleLogin} className="w-full mt-3 bg-slate-200 text-slate-900 py-3 rounded-lg font-bold hover:bg-white transition">
-                Verify Identity
+              {loginError && <p role="alert" className="text-red-400 text-sm mt-2">{loginError}</p>}
+              <button onClick={handleLogin} disabled={busy || !username || !password}
+                className="w-full mt-3 bg-slate-200 text-slate-900 py-3 rounded-lg font-bold hover:bg-white transition disabled:opacity-50">
+                {busy ? "Checking..." : "Verify Identity"}
               </button>
             </div>
 
@@ -238,7 +299,7 @@ function App() {
       )}
 
       {view === 'public-verify' && <PublicVerification goBack={() => setView('home')} />}
-      {view === 'officer-upload' && <OfficerUpload goBack={() => { setView('home'); setPassword(""); }} />}
+      {view === 'officer-upload' && <OfficerUpload goBack={handleLogout} />}
     </>
   );
 }

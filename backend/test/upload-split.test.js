@@ -2,26 +2,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
-const { createApp } = require('../app');
 
-/** Fake S3 client that records every command sent to it. */
-function fakeS3() {
-    const sent = [];
-    return { sent, send: async (command) => { sent.push(command); return {}; } };
-}
+const { fakeS3, start, loginToken, postFile } = require('./helpers');
 
-/** Starts the app on a random port and returns its base URL plus a close function. */
-async function start(s3) {
-    const app = createApp({ s3, bucketName: 'test-bucket', region: 'ap-south-1' });
-    const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
-    return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
-}
-
-function post(url, bytes, name = 'deed.pdf') {
-    const form = new FormData();
-    form.append('file', new Blob([bytes], { type: 'application/pdf' }), name);
-    return fetch(url, { method: 'POST', body: form });
-}
+const post = (url, bytes, name = 'deed.pdf', token) => postFile(url, bytes, { name, token });
 
 const FILE = Buffer.from('%PDF-1.4 genuine land deed #4471');
 const SHA = crypto.createHash('sha256').update(FILE).digest('hex');
@@ -43,7 +27,7 @@ test('verifying many files, including a forged copy with the same name, writes n
     const s3 = fakeS3();
     const api = await start(s3);
     try {
-        for (const body of [FILE, Buffer.from('%PDF-1.4 FORGED deed'), Buffer.alloc(0x4000, 7)]) {
+        for (const body of [FILE, Buffer.from('%PDF-1.4 FORGED deed'), Buffer.concat([Buffer.from('%PDF-1.5 '), Buffer.alloc(0x4000, 7)])]) {
             const res = await post(`${api.url}/api/hash`, body, 'deed.pdf');
             assert.strictEqual(res.status, 200);
         }
@@ -57,7 +41,8 @@ test('POST /api/anchor stores the file once and returns the same hash as /api/ha
     const s3 = fakeS3();
     const api = await start(s3);
     try {
-        const res = await post(`${api.url}/api/anchor`, FILE);
+        const { token } = await loginToken(api.url);
+        const res = await post(`${api.url}/api/anchor`, FILE, 'deed.pdf', token);
         assert.strictEqual(res.status, 200);
         const body = await res.json();
         assert.strictEqual(body.hash, SHA);
@@ -86,8 +71,10 @@ test('both routes reject a request with no file and write nothing', async () => 
     const s3 = fakeS3();
     const api = await start(s3);
     try {
+        const { token } = await loginToken(api.url);
         for (const route of ['/api/hash', '/api/anchor']) {
-            const res = await fetch(`${api.url}${route}`, { method: 'POST', body: new FormData() });
+            const res = await fetch(`${api.url}${route}`, { method: 'POST', body: new FormData(),
+                headers: { Authorization: `Bearer ${token}` } });
             assert.strictEqual(res.status, 400);
         }
         assert.strictEqual(s3.sent.length, 0);

@@ -2,9 +2,14 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",
+    "hash-password": "node scripts/hash-password.js",
+    "check-bucket": "node scripts/check-bucket.js",
+    "reconcile": "node scripts/reconcile.js",
+    "robustness": "node scripts/robustness.js",
+    "calibrate-tier3": "node scripts/calibrate-tier3.js",
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
@@ -13,12 +18,24 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.978.0",
+    "@aws-sdk/s3-request-presigner": "^3.1148.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
+    "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1",
+    "file-type": "^16.5.4",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.24.5",
     "multer": "^2.0.2",
     "sharp": "^0.35.5",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.4.3"
   }
 }
