@@ -1161,7 +1161,7 @@ No code ownership. Member D keeps the project honest (citations, numbers, QA) an
 
 **Tasks**
 
-- [ ] The repo exists (jpsiddharth2008/MindForge-Tatva-Finals). Push the first commit right away (CLAUDE.md and docs/ with the plan and backlog): it timestamps the idea.
+- [ ] The repo exists (jpsiddharth2008/MindForge-Tatva-Finals). Push the first commit right away (RULES.md and docs/ with the plan and backlog): it timestamps the idea.
 - [ ] Run the issue loader (Appendix A): preview first, then --execute.
 - [ ] Add CODEOWNERS from Section 7.2 with real usernames; require a pull request before merging to main.
 - [ ] Create a project board with Todo, In progress, Review and Done.

@@ -1,8 +1,8 @@
 # Prompts for AI coding sessions
 
 Open your AI tool inside your own clone of the repo:
-- **Claude Code** reads `CLAUDE.md` automatically. Just paste your prompt below.
-- **Another AI tool:** paste the contents of `CLAUDE.md` first, then your prompt.
+- Paste your prompt below after your AI tool has loaded `RULES.md`.
+- **Another AI tool:** paste the contents of `RULES.md` first, then your prompt.
 
 Give the AI `docs/PLAN.md` and `docs/issues.json`. The Word file and the issue-loader script are for humans.
 
@@ -11,7 +11,7 @@ Give the AI `docs/PLAN.md` and `docs/issues.json`. The Word file and the issue-l
 ### Dev A: measurement
 ```
 I'm Dev A (measurement) on our 4-person hackathon team. We submit at 11:00 tomorrow (IST).
-Read CLAUDE.md. Then read sections 1, 3.3, 4.3–4.8 and 6.2 of docs/PLAN.md, and my issues (owner "A") in docs/issues.json.
+Read RULES.md. Then read sections 1, 3.3, 4.3–4.8 and 6.2 of docs/PLAN.md, and my issues (owner "A") in docs/issues.json.
 Start with A1.
 Before writing code, give me your plan in 5 lines and any questions.
 Work only in the files the issue lists.
@@ -24,7 +24,7 @@ When the acceptance criteria pass:
 ### Dev B: attack surface
 ```
 I'm Dev B (attack surface) on our 4-person hackathon team. We submit at 11:00 tomorrow (IST).
-Read CLAUDE.md. Then read sections 1, 3, 4.3–4.6 and 6.2 of docs/PLAN.md, and my issues (owner "B") in docs/issues.json.
+Read RULES.md. Then read sections 1, 3, 4.3–4.6 and 6.2 of docs/PLAN.md, and my issues (owner "B") in docs/issues.json.
 Start with B1, the hand-written attack corpus:
 - Help me with the YAML format, the categories and a validator, and review my items.
 - I write the item text myself.
@@ -40,7 +40,7 @@ When the acceptance criteria pass:
 ### Dev C: guard and demo
 ```
 I'm Dev C (guard and demo) on our 4-person hackathon team. We submit at 11:00 tomorrow (IST).
-Read CLAUDE.md. Then read sections 1, 3.3, 4.3–4.7, 5 and 6.2 of docs/PLAN.md, and my issues (owner "C") in docs/issues.json.
+Read RULES.md. Then read sections 1, 3.3, 4.3–4.7, 5 and 6.2 of docs/PLAN.md, and my issues (owner "C") in docs/issues.json.
 Start with C1:
 - Help me find and adapt the monitor prompt from a published defence (start with arXiv:2509.14285), and cite it in the prompt file's header.
 - Don't invent the prompt.
@@ -56,7 +56,7 @@ When the acceptance criteria pass:
 ### Member D: pitch, docs and QA (no code)
 ```
 I'm Member D on our 4-person hackathon team. I own the docs, citations, the pitch deck and testing, not code. We submit at 11:00 tomorrow (IST).
-Read CLAUDE.md. Then read sections 1, 5, 6 and 7.9 of docs/PLAN.md, and my issues (owner "D") in docs/issues.json.
+Read RULES.md. Then read sections 1, 5, 6 and 7.9 of docs/PLAN.md, and my issues (owner "D") in docs/issues.json.
 The repo already exists (https://github.com/jpsiddharth2008/MindForge-Tatva-Finals). Start with what's left of D1, then D2.
 For citations:
 - Mark a paper "found" only after its link actually opens.
