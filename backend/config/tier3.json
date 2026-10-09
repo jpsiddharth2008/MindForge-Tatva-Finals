@@ -3,6 +3,7 @@
   "regionFar": 16,
   "wholeFar": 8,
   "maxLocalisedCells": 2,
+  "regionStableMax": 12,
   "calibration": {
     "measuredOn": "2026-10-10, sharp 0.35.5, seeded noise (6 samples)",
     "how": "npm run calibrate-tier3",
@@ -18,6 +19,7 @@
     "margins": "cellFar 12 sits 4 above the largest re-capture tile; regionFar 16 sits 10 above the largest re-capture photo region and 8 below the smallest swap",
     "wholeFarNote": "reported but never used to decide anything: the whole-page hash cannot see a photo swap (2 to 6, the same as ordinary captures)",
     "knownBlindSpots": "A different person's card on the same template, and edits to printed text (date of birth, CGPA), are INVISIBLE to a perceptual hash (largest tile 12 and 0). Tier 3 cannot approve or reject on its own. That is why it is advisory.",
-    "mustRedo": "Re-run on a sample of real captures and real forgeries before relying on these numbers."
+    "mustRedo": "Re-run on a sample of real captures and real forgeries before relying on these numbers.",
+    "regionStability": "Measured per region when a document is issued: the largest Hamming distance of the region's own hash under JPEG q60, a half-size JPEG q70 copy and a 1px blur. Textured (procedural) photos: 0 to 6 over 12 photos. Flat placeholder portraits with hard edges: 28 and 30. regionStableMax 12 sits 6 above the first and 16 below the second. A region above it is reported as unreliable and never judged (its re-capture distances reach 30, its swap distances start at 16, so no regionFar can separate them)."
   }
 }

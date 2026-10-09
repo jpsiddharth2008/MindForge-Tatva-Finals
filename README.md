@@ -287,13 +287,13 @@ sequenceDiagram
     API->>DB: status: ISSUED + blockNumber
 ```
 
-**What differs from the target design.** The officer's wallet signs the transaction, not the backend (`backend/src/services/blockchain.service.js` exists for backend signing but is not wired in). The frontend still calls the **old, ungated** contract, so the issuer allowlist in the new `CredentialRegistry` is not yet enforced in practice. There is no QR step yet (#58).
+**How it is wired.** The officer's wallet signs the transaction, not the backend. The browser calls whichever `CredentialRegistry` is named by `VITE_CONTRACT_ADDRESS` / `VITE_CHAIN_ID` (no address is written in the code) and refuses to sign if the wallet is on another network. The server never trusts what the browser says happened: `chain-confirmed` re-reads the transaction and the registry and only then marks the document `ISSUED`. A transaction that succeeded but anchored *different* data is rejected as `WRONG_DATA`. When the document is issued the officer gets its QR code (pointers only: content hash, chain, contract).
 
 **Failure handling.** The record is created `PENDING` *before* the upload, so a crash leaves a visible row rather than an invisible orphan. If a step fails the record is marked `FAILED` with a short reason code; the stored object is **kept** (its key is the content hash, so a retry reuses it). Re-submitting the same file, or a re-photographed copy of the same document, returns the existing record instead of issuing twice. `npm run reconcile` resolves records stuck part-way by asking the chain what happened.
 
-### Verification — public, no wallet required (**target design, not yet implemented**)
+### Verification — public, no wallet required (implemented)
 
-> Today the public screen hashes the uploaded file in memory (`POST /api/hash`, nothing is stored) and the browser looks that hash up on chain. The flow below, where the backend computes all three tiers and applies the verdict matrix, is what #66 will build. Its parts exist separately: `backend/tier2.js`, `backend/phash.js`, `backend/forensics.js`.
+> `POST /api/verify` runs this flow (`backend/verification.js`). Nothing is stored. The answer for *registered* and *revoked* always comes from the chain; if the chain cannot be reached the response says `chainChecked: false` instead of pretending. A QR code is never trusted by itself: the server recomputes the document's own content hash and requires it to equal the code's (`QR_MISMATCH` otherwise).
 
 ```mermaid
 sequenceDiagram
@@ -305,7 +305,7 @@ sequenceDiagram
     participant DB as MongoDB
 
     V->>FE: Upload suspect document (or scan QR)
-    FE->>API: POST /api/verify/file
+    FE->>API: POST /api/verify (file, optional QR text)
     Note over API: Everything below runs in memory.<br/>The file is never written to S3.
 
     API->>API: Preprocess — deskew, perspective-correct
@@ -340,7 +340,9 @@ sequenceDiagram
     end
 ```
 
-Verification is meant to be a **read-only** chain call: no gas, no wallet, no account. Each verification attempt is recorded in the audit trail (action, verdict, truncated network address; never the file or its hash).
+Verification is a **read-only** chain call: no gas, no wallet, no account. Each verification attempt is recorded in the audit trail (action, verdict, truncated network address; never the file or its hash). The public sees *which* field changed but not the registered value (it is personal data); a logged-in issuer sees both.
+
+**What Tier 3 can and cannot check.** The photo region is compared only when its hash is stable under ordinary re-capture. For a flat, hard-edged graphic (such as the placeholder portraits in the test certificates) it is not, so the verdict says the photo area "was not checked" rather than flagging a legitimate JPEG copy. This was found by driving the real UI and is explained in `backend/TIER3.md`.
 
 ---
 
@@ -355,15 +357,15 @@ Status is tracked honestly so that documentation never overstates the code. ✅ 
 | Upload validation, HTTP hardening, redacted logging | ✅ | type + magic-byte check, size cap, helmet, CORS allowlist, rate limits, secrets scrubbed from logs | — |
 | S3 storage | 🟡 | content-addressed keys, server-side encryption, ≤5-minute signed links, `npm run check-bucket`. Tested with a fake client; **never run against a real bucket** | — |
 | MongoDB layer | ✅ | document model, issuance state machine with recovery sweep, audit trail with expiry. Tested against a real MongoDB | — |
-| Tier 2 — canonical content hash | 🟡 | OCR, flattening, label-anchored extraction, field-level diff; **one template, images only**; proven on simulated copies, **not real phones**; not yet anchored on chain. Two implementations currently exist (`backend/*.js` and `backend/src/services/`); one will be retired | #52 |
-| Tier 3 — perceptual hash + region grid | 🟡 | built, stored off-chain, advisory only; thresholds measured on **simulated** data; not used by any endpoint yet | #65 |
-| Tamper forensics / verdict engine | 🟡 | engine and verdict card built and unit-tested; the seven adversarial cases are tested as signals, not with real images; **no endpoint calls it** | #66 |
-| On-chain issuer authorisation | 🟡 | `blockchain/` contract, ABI and 19 passing tests; **not deployed**, source not verified on an explorer. The old, ungated contract `0x1477…` is on **Ethereum Sepolia, not Polygon Amoy** (checked by bytecode) | #62 |
-| Revocation | 🟡 | contract function only; no API, UI or database mirror | #59 |
-| QR verification | ❌ | | #58 |
-| Officer dashboard, routing, error boundary | ❌ | | #60 |
+| Tier 2 — canonical content hash | 🟡 | OCR, flattening, label-anchored extraction, field-level diff, **anchored on chain next to the byte hash**; **one template, images only**; proven on simulated copies, **not real phones**. Two implementations currently exist (`backend/*.js` and `backend/src/services/`); one will be retired | #52 |
+| Tier 3 — perceptual hash + region grid | 🟡 | built, stored off-chain, **used by `POST /api/verify` as advice only**; thresholds measured on **simulated** data; a photo region that is not stable under re-capture is reported as unchecked | #65 |
+| Tamper forensics / verdict engine | ✅ | `POST /api/verify` returns one of eight verdicts with field diffs, an appearance map and the anchor; the seven adversarial cases are tested end to end with real images and a real database (the chain is scripted in those tests, real in `blockchain/test`) | #66 |
+| On-chain issuer authorisation | 🟡 | `blockchain/` contract, ABI and passing tests against a real EVM, including the real backend + MongoDB; the frontend and backend take the address from configuration. **Not deployed to a public network**, source not verified on an explorer. The old, ungated contract `0x1477…` is on **Ethereum Sepolia, not Polygon Amoy** (checked by bytecode) and is no longer referenced by the code | #62 |
+| Revocation | ✅ | `revoke()` is sent by the issuer's wallet; the server reads the reason and time **from the chain** before mirroring it; the public verdict and the officer's page show both. Tested against a real EVM and in a real browser | #59 |
+| QR verification | ✅ | the code holds pointers only; verification recomputes the document's own hash and requires it to match (`QR_MISMATCH`). Scanning from a photo or the camera; tested by scanning the image the issuing page drew | #58 |
+| Officer dashboard, routing, error boundary | ✅ | login, paged document list with status counts and filter, issue form, document page (transaction link, QR, history, revoke), public verify page, not-found page, error boundary; 401 returns to login | #60 |
 | Forgery test corpus | ❌ | tests use synthetic fixtures generated in code | #74 |
-| Tests | 🟡 | ~270 backend tests (`cd backend && npm test`), Hardhat tests in `blockchain/test`; **no frontend tests** | — |
+| Tests | 🟡 | `cd backend && npm test` (342, real MongoDB in memory), `cd blockchain && npx hardhat test` (42, real EVM), `cd frontend && npm test` (97, jsdom). Also driven by hand in a real browser against a local chain; **not tested against real S3, Atlas, Polygon or a real wallet extension** | — |
 
 **Known limitation — what is proven.** The Tier 2 and Tier 3 results come from simulated damage to one synthetic certificate (compression, resizing, rotation, noise, a drawn perspective). That is evidence the method works, not proof it works on photographs from real phones. The confidence threshold and Tier 3 distances must be re-measured on real captures before anyone relies on them (`npm run robustness`, `npm run calibrate-tier3` in `backend/`).
 
@@ -465,6 +467,8 @@ The backend does not hold a signing key today (the officer's wallet signs). `blo
 
 ```ini
 VITE_API_URL=http://localhost:5000        # the API origin, without a path
+VITE_CONTRACT_ADDRESS=                    # the deployed CredentialRegistry (printed by the deploy script)
+VITE_CHAIN_ID=                            # e.g. 80002 for Polygon Amoy. Without these the app can verify but not issue or revoke
 ```
 
 > ⚠️ **Vite inlines every `VITE_*` variable into the client bundle.** They are shipped to every visitor's browser and must be treated as public. A `VITE_PRIVATE_KEY` or `VITE_MONGODB_URI` is equivalent to publishing it. Database URIs, cloud secrets, and private keys belong exclusively in `backend/.env`.
@@ -482,17 +486,21 @@ All routes are under the API origin. "Auth" means `Authorization: Bearer <token>
 | `GET` | `/api/health` | — | Component states (never credentials or addresses) |
 | `POST` | `/api/auth/login` | — | Exchange the issuer's credentials for a token |
 | `POST` | `/api/hash` | — | Hash a file in memory, store nothing; records an audit event |
-| `POST` | `/api/anchor` | ✅ | Store a document and create its record. Optional JSON `fields` form field adds the Tier 2 hash |
+| `POST` | `/api/anchor` | ✅ | Store a document and create its record. Optional JSON `fields` form field adds the Tier 2 hash (images are read back and must agree: `422` if they confidently do not) |
+| `POST` | `/api/verify` | optional | **Public.** Multipart `file` (+ optional `qr` text). Returns the verdict, per-tier evidence and the anchor. Signed-in issuers also see registered values of changed fields. Rate-limited |
+| `GET` | `/api/documents` | ✅ | Your documents, newest first. Query: `status`, `limit` (1-50), `cursor`. Returns `documents`, `counts` per status, `nextCursor` |
 | `GET` | `/api/documents/:id` | ✅ | Document record |
 | `GET` | `/api/documents/by-hash/:sha256` | ✅ | Record by byte hash |
 | `GET` | `/api/documents/by-tx/:txHash` | ✅ | Record by transaction hash |
 | `POST` | `/api/documents/:id/chain-pending` | ✅ | The wallet sent a transaction |
 | `POST` | `/api/documents/:id/chain-confirmed` | ✅ | Server checks the transaction on chain, then marks the document issued |
 | `POST` | `/api/documents/:id/chain-failed` | ✅ | The wallet rejected or failed the transaction |
+| `GET` | `/api/documents/:id/qr` | ✅ | The text to encode as this issued document's QR code |
+| `POST` | `/api/documents/:id/revoke` | ✅ | After the wallet sent `revoke()`: the server reads the chain, then marks the document `REVOKED` (reason and time come from the chain) |
 | `GET` | `/api/documents/:id/audit` | ✅ | History of one of your documents |
 | `GET` | `/api/audit` | ✅ | Recent audit events (filters: `action`, `outcome`, `limit`, `before`) |
 
-**Not built yet:** listing documents (`GET /api/documents`), revocation (`POST …/revoke`), file verification (`POST /api/verify/file`), verify-by-id for QR codes (`GET /api/verify/:id`), logout and "current user".
+**Not built:** logout and "current user" endpoints (a session is an in-memory token that ends when the tab closes or after 8 hours).
 
 ## Security
 
@@ -559,7 +567,7 @@ It exits with a message naming the missing setting (never its value): `JWT_SECRE
 ## Roadmap
 
 **Next**
-Connect the verdict engine to a verification endpoint and show the region heatmap · deploy the new issuer-gated contract and point the frontend at it · anchor both the byte hash and the content hash · revocation API and UI · QR verification bound to document content · officer dashboard · measure Tier 2 and Tier 3 on real phone captures and a proper forgery corpus
+Deploy the issuer-gated contract to a public network and verify its source (#62) · measure Tier 2 and Tier 3 on real phone captures and a proper forgery corpus (#52, #65, #74) · retire the duplicate Tier 2 implementation · more than one template
 
 **Later**
 Institutional SSO and per-user roles · salting or another answer to the erasure question · deletion endpoint · batch issuance · W3C Verifiable Credentials and DID interoperability · selective disclosure via zero-knowledge proofs · mobile verification app

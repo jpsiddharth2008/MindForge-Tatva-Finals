@@ -12,6 +12,7 @@ const c = require('./fixtures/certificate');
 const { measure, classify } = require('../scripts/calibrate-tier3');
 
 const T = ph.loadThresholds();
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 't3-'));   // config files written by tests; removed afterwards
 const OPTIONS = { regions: { photo: TEMPLATE.photoRegion } };
 const gray = (w, h, fn) => { const data = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = fn(x, y); return { data, width: w, height: h }; };
 const seeded = (seed) => { let s = seed; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; };
@@ -105,7 +106,7 @@ test('thresholds come from config/tier3.json and are validated', () => {
     assert.ok(T.regionFar > T.calibration.reCapturePhotoRegionLargest, 'the region threshold sits above what ordinary captures reach');
     assert.ok(T.cellFar > T.calibration.reCaptureLargestTile, 'the tile threshold sits above what ordinary captures reach');
     assert.match(T.calibration.data, /SIMULATED/, 'the config says where its numbers came from');
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't3-'));
+    const dir = scratch;
     const write = (obj) => { const f = path.join(dir, 'c.json'); fs.writeFileSync(f, JSON.stringify(obj)); return f; };
     assert.throws(() => ph.loadThresholds(write({ cellFar: 12, regionFar: 16, wholeFar: 8 })), /maxLocalisedCells/);
     assert.throws(() => ph.loadThresholds(write({ cellFar: -1, regionFar: 16, wholeFar: 8, maxLocalisedCells: 2 })), /cellFar/);
@@ -264,4 +265,39 @@ test('EVIDENCE: at the committed thresholds every simulated re-capture is CONSIS
     assert.ok(Math.min(...m.swaps.map((r) => r.regionDistances.photo)) >= 24, 'the smallest swap distance the config records');
 });
 
-after(() => { /* nothing to clean: sharp and the DCT hold no handles */ });
+after(() => { fs.rmSync(scratch, { recursive: true, force: true }); });
+
+// ---------------------------------------------------------------- regions that cannot be judged
+test('regionStability: a textured photo barely moves under re-capture; a flat hard-edged graphic moves as far as a different picture would', async () => {
+    const textured = [];
+    for (const seed of [11, 22, 33, 44, 55, 66]) textured.push((await look(await c.renderWithPhoto(seed))).regions.photo.stability);
+    const flat = (await look(await c.render(c.DEFAULT_FIELDS))).regions.photo.stability;
+    const flatB = (await look(await c.render(c.DEFAULT_FIELDS, { photoStyle: 'b' }))).regions.photo.stability;
+    assert.ok(Math.max(...textured) <= T.regionStableMax, `textured photos: ${textured}`);
+    assert.ok(flat > T.regionStableMax && flatB > T.regionStableMax, `flat portraits: ${flat}, ${flatB}`);
+    assert.ok(T.regionStableMax < T.regionFar, 'a region must be steadier than the distance that counts as "changed"');
+});
+
+test('compareVisual: an unstable region is reported as unreliable and never judged, however far it is', () => {
+    const unstable = { ...anchored, regions: { photo: { h: 'aaaaaaaaaaaaaaaa', flat: false, stability: 30 } } };
+    const r = ph.compareVisual(unstable, { ...anchored, regions: { photo: { h: FAR, flat: false } } }, { ...T, regionStableMax: 12 });
+    assert.deepStrictEqual([r.pattern, r.changedRegions, r.unreliableRegions, r.regionDistances.photo], ['CLOSE', [], ['photo'], 32]);
+    assert.strictEqual(ph.advice(r), 'CONSISTENT');
+});
+
+test('compareVisual: a stable region is still judged; a record from before stability was measured behaves as it always did', () => {
+    const presented = { ...anchored, regions: { photo: { h: FAR, flat: false } } };
+    const stable = { ...anchored, regions: { photo: { h: 'aaaaaaaaaaaaaaaa', flat: false, stability: 4 } } };
+    assert.deepStrictEqual(ph.compareVisual(stable, presented, { ...T, regionStableMax: 12 }).changedRegions, ['photo']);
+    assert.deepStrictEqual(ph.compareVisual(anchored, presented, { ...T, regionStableMax: 12 }).changedRegions, ['photo']);   // no stability recorded
+    assert.deepStrictEqual(ph.compareVisual(stable, presented, T).unreliableRegions, [] , 'no limit configured: nothing is excluded');
+});
+
+test('loadThresholds: regionStableMax is optional but must be a number when present', () => {
+    const write = (o) => { const f = path.join(scratch, 't.json'); fs.writeFileSync(f, JSON.stringify(o)); return f; };
+    const base = { cellFar: 12, regionFar: 16, wholeFar: 8, maxLocalisedCells: 2 };
+    assert.strictEqual(ph.loadThresholds(write(base)).regionStableMax, undefined);
+    assert.strictEqual(ph.loadThresholds(write({ ...base, regionStableMax: 12 })).regionStableMax, 12);
+    assert.throws(() => ph.loadThresholds(write({ ...base, regionStableMax: 'x' })), /regionStableMax/);
+    assert.throws(() => ph.loadThresholds(write({ ...base, regionStableMax: -1 })), /regionStableMax/);
+});

@@ -393,3 +393,36 @@ test('a failing chain does not become a verdict: it is an error, never "authenti
         assert.ok(!body.verdict);
     } finally { await s.close(); }
 });
+
+// ======================================================================== a flat graphic where the photo goes
+// Found by driving the real UI: a certificate whose photo box holds a flat, hard-edged graphic (a cartoon portrait, a seal) is
+// not hashable. Its region hash moves 28-30 bits under an ordinary JPEG/half-size copy, as far as a different picture would, so
+// judging it falsely accused a legitimate copy of being altered. Such a region is now reported as unchecked instead.
+test('a recompressed copy of a certificate with a FLAT graphic in the photo box is AUTHENTIC_COPY, and says the photo was not checked', async () => {
+    const s = await api(fakeChain());
+    try {
+        const flat = await c.render(c.DEFAULT_FIELDS);                        // the placeholder portrait: two tones, hard edges
+        await s.issue(flat, c.DEFAULT_FIELDS);
+        for (const make of [c.jpeg(70), c.jpeg(50), c.pipe(c.shrink(0.7), c.jpeg(70))]) {
+            const { body } = await s.verify(await make(flat), { type: 'image/jpeg', name: 'copy.jpg' });
+            assert.strictEqual(body.verdict, 'AUTHENTIC_COPY', JSON.stringify(body.tiers.visual));
+            assert.deepStrictEqual(body.tiers.visual.unreliableRegions, ['photo']);
+            assert.deepStrictEqual(body.tiers.visual.changedRegions, []);
+            assert.match(body.reason, /photo area is too plain to compare reliably, so it was not checked/);
+        }
+    } finally { await s.close(); }
+});
+
+test('a textured photograph is still checked: a swapped photo is flagged and nothing is reported as unchecked', async () => {
+    const s = await api(fakeChain());
+    try {
+        await s.issue(await original(), c.DEFAULT_FIELDS);
+        const { body } = await s.verify(await original(PHOTO_B), { type: 'image/png' });
+        assert.strictEqual(body.verdict, 'TAMPERED_VISUAL');
+        assert.deepStrictEqual(body.tiers.visual.changedRegions, ['photo']);
+        assert.deepStrictEqual(body.tiers.visual.unreliableRegions, []);
+        const ok = await s.verify(await c.jpeg(60)(await original()), { type: 'image/jpeg' });
+        assert.strictEqual(ok.body.verdict, 'AUTHENTIC_COPY');
+        assert.deepStrictEqual(ok.body.tiers.visual.unreliableRegions, []);
+    } finally { await s.close(); }
+});
