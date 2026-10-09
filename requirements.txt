@@ -1,0 +1,9 @@
+# Shared file: add your own lines, never remove anyone else's.
+# Dev A
+numpy
+openai
+pyyaml
+pytest
+# Dev C (ui/ only)
+# streamlit
+# rich
