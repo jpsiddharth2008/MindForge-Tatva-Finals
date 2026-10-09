@@ -4,8 +4,22 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const STATUSES = ['PENDING', 'STORED', 'BLOCKCHAIN_PENDING', 'ISSUED', 'FAILED', 'REVOKED'];
+
+// The only moves allowed. PENDING -> PENDING is a takeover of a crashed attempt (see claimRetry).
+const TRANSITIONS = {
+    PENDING: ['STORED', 'FAILED'],
+    STORED: ['BLOCKCHAIN_PENDING', 'FAILED'],
+    BLOCKCHAIN_PENDING: ['ISSUED', 'FAILED'],
+    ISSUED: ['REVOKED'],
+    FAILED: ['PENDING'],
+    REVOKED: [],
+};
+
 // A record in one of these states already represents a stored document, so a second upload of the same bytes is a duplicate.
 const DUPLICATE_STATUSES = ['STORED', 'BLOCKCHAIN_PENDING', 'ISSUED', 'REVOKED'];
+
+// Short codes only: a failure reason is never free text, so it can never carry a secret.
+const FAILURE_REASONS = ['S3_FAILED', 'CHAIN_REVERTED', 'WRONG_CONTRACT', 'USER_REJECTED', 'CLIENT_ERROR', 'STUCK_PENDING'];
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const TX_HASH = /^0x[a-f0-9]{64}$/;
@@ -16,6 +30,13 @@ class DuplicateDocumentError extends Error {
         super('A document with this SHA-256 already exists');
         this.name = 'DuplicateDocumentError';
         this.sha256 = sha256;
+    }
+}
+
+class IllegalTransitionError extends Error {
+    constructor(from, to) {
+        super(`Illegal status change ${from} -> ${to}`);
+        this.name = 'IllegalTransitionError';
     }
 }
 
@@ -35,6 +56,7 @@ function buildDocumentModel(connection = mongoose) {
         transactionHash: { type: String, match: TX_HASH, index: true, unique: true, sparse: true },
         blockNumber: { type: Number, min: 0 },
         status: { type: String, enum: STATUSES, default: 'PENDING', index: true },
+        failureReason: { type: String, enum: FAILURE_REASONS },
         issuedAt: Date,
     }, { timestamps: true, strict: true, strictQuery: true });   // strict: fields not in the schema are dropped, never stored
     return connection.model('Document', schema);
@@ -44,9 +66,9 @@ function buildDocumentModel(connection = mongoose) {
 function publicView(doc) {
     if (!doc) return null;
     const o = typeof doc.toObject === 'function' ? doc.toObject() : doc;
-    const { documentId, sha256, s3Key, originalFileName, mimeType, size, issuerName, status, chainId, contractAddress,
+    const { documentId, sha256, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId, contractAddress,
         transactionHash, blockNumber, issuedAt, createdAt, updatedAt } = o;
-    return { documentId, sha256, s3Key, originalFileName, mimeType, size, issuerName, status, chainId, contractAddress,
+    return { documentId, sha256, s3Key, originalFileName, mimeType, size, issuerName, status, failureReason, chainId, contractAddress,
         transactionHash, blockNumber, issuedAt, createdAt, updatedAt };
 }
 
@@ -75,9 +97,35 @@ function createDocuments(Document) {
         findBySha256: (sha256) => lean(Document.findOne({ sha256: String(sha256) })),
         findByTransactionHash: (transactionHash) => lean(Document.findOne({ transactionHash: String(transactionHash).toLowerCase() })),
 
-        /** Marks a failed or pending record as stored again (a retry of the same bytes). */
-        async restore(documentId, fields) {
-            return lean(Document.findOneAndUpdate({ documentId }, { $set: { ...fields, status: 'STORED' } }, { new: true, runValidators: true }));
+        /**
+         * Atomic status change: succeeds only if the record is currently in one of `from`, and only along an allowed edge.
+         * Returns the updated record, or null if the record was not in a `from` state (someone else moved it first).
+         */
+        async transition(documentId, from, to, extra = {}) {
+            for (const f of from) if (!TRANSITIONS[f].includes(to)) throw new IllegalTransitionError(f, to);
+            const { failureReason, ...rest } = extra;
+            const update = { $set: { ...rest, status: to } };
+            if (failureReason) update.$set.failureReason = failureReason;
+            else if (to !== 'FAILED') update.$unset = { failureReason: '' };
+            return lean(Document.findOneAndUpdate({ documentId, status: { $in: from } }, update, { new: true, runValidators: true }));
+        },
+
+        /**
+         * Takes over a failed attempt, or a pending one that has been silent for `staleMs` (a crashed request).
+         * Atomic: of several simultaneous callers exactly one gets the record back; the rest get null.
+         */
+        async claimRetry(documentId, staleMs, now = Date.now()) {
+            const cutoff = new Date(now - staleMs);
+            return lean(Document.findOneAndUpdate(
+                { documentId, $or: [{ status: 'FAILED' }, { status: 'PENDING', updatedAt: { $lt: cutoff } }] },
+                { $set: { status: 'PENDING', updatedAt: new Date(now) }, $unset: { failureReason: '' } },
+                { new: true },
+            ));
+        },
+
+        /** Records that have sat in one of `statuses` since before now - olderThanMs (stuck issuance). */
+        findStuck({ statuses, olderThanMs, now = Date.now() }) {
+            return lean(Document.find({ status: { $in: statuses }, updatedAt: { $lt: new Date(now - olderThanMs) } }).sort({ updatedAt: 1 }));
         },
 
         /** Attaches the on-chain transaction to a record so it can be found by transaction hash. */
@@ -97,4 +145,7 @@ function createDocuments(Document) {
     };
 }
 
-module.exports = { buildDocumentModel, createDocuments, publicView, DuplicateDocumentError, STATUSES, DUPLICATE_STATUSES };
+module.exports = {
+    buildDocumentModel, createDocuments, publicView, DuplicateDocumentError, IllegalTransitionError,
+    STATUSES, TRANSITIONS, DUPLICATE_STATUSES, FAILURE_REASONS,
+};

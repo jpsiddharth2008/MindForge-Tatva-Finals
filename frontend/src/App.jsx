@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
-import { login, clearToken, hashFile, anchorFile } from './api';
+import { login, clearToken, hashFile, anchorFile, chainPending, chainConfirmed, chainFailed } from './api';
 import { UploadCloud, ShieldCheck, Lock, User, Briefcase, Search } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -103,10 +103,16 @@ const OfficerUpload = ({ goBack }) => {
   // cloud interaction
   const [file, setFile] = useState(null);
   const [hash, setHash] = useState("");
+  const [doc, setDoc] = useState(null);       // the server's record of this document, including its status
   const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);    // true while a request or wallet step is in flight: blocks double clicks
+
+  // Only a stored document that has not started (or already finished) the chain step can be signed.
+  const canSign = doc?.status === 'STORED' || doc?.status === 'FAILED';
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || busy) return;
+    setBusy(true);
     setStatus("Uploading to Cloud Vault...");
     const formData = new FormData();
     formData.append("file", file);
@@ -114,33 +120,57 @@ const OfficerUpload = ({ goBack }) => {
     try {
       const res = await anchorFile(formData);
       setHash(res.data.hash);
-      setStatus("Cloud Upload Complete.");
+      setDoc(res.data.document);
+      const s = res.data.document?.status;
+      if (res.data.inProgress) setStatus("This document is already being processed. Try again shortly.");
+      else if (res.data.duplicate && s === 'ISSUED') setStatus("This document is already issued on the blockchain. Nothing more to do.");
+      else if (res.data.duplicate && s === 'BLOCKCHAIN_PENDING') setStatus("A blockchain transaction for this document is already in progress.");
+      else setStatus("Cloud Upload Complete.");
     } catch (err) {
       if (err.response?.status === 401) { goBack(); return; }   // session expired: back to the login screen
       setStatus("Upload Failed.");
+    } finally {
+      setBusy(false);
     }
   };
 
   // blockchain interaction
   const saveToBlockchain = async () => {
+    if (busy || !canSign) return;
+    setBusy(true);
     setStatus("Requesting Wallet Signature...");
+    let tx = null;
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-      
-      const tx = await contract.addDocument(hash);
+
+      tx = await contract.addDocument(hash);
+      setDoc(await chainPending(doc.documentId, tx.hash).then((r) => r.document));   // server records the transaction
       setStatus("Mining Transaction...");
       await tx.wait();
-      
-      setStatus(`🎉 SUCCESS! Document Registered.`);
+
+      // the server checks the chain itself before calling the document issued
+      const result = await chainConfirmed(doc.documentId, tx.hash);
+      setDoc(result.document);
+      if (result.state === 'issued') setStatus("🎉 SUCCESS! Document Registered.");
+      else if (result.state === 'pending') setStatus("Transaction sent but not confirmed yet. It will be checked again later.");
+      else setStatus("The blockchain rejected this transaction. You can try again.");
     } catch (err) {
+      if (err.response?.status === 401) { goBack(); return; }
       if (JSON.stringify(err).includes("Document already exists")) {
         alert("⚠️ WARNING: This document is ALREADY registered!");
-        window.location.reload(); 
+        window.location.reload();
         return;
       }
-      setStatus("Error: " + err.message);
+      // No transaction was sent (rejected in the wallet, or it failed before sending): record that so the record is not left half-issued.
+      if (!tx && doc?.documentId) {
+        const reason = err?.code === 'ACTION_REJECTED' ? 'USER_REJECTED' : 'CLIENT_ERROR';
+        chainFailed(doc.documentId, reason).then((r) => setDoc(r.document)).catch(() => {});
+      }
+      setStatus(err?.code === 'ACTION_REJECTED' ? "Signature rejected in the wallet." : "Error: " + (err.shortMessage || err.message));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -163,15 +193,18 @@ const OfficerUpload = ({ goBack }) => {
             />
           </div>
 
-          <button onClick={handleUpload} className="w-full bg-[#111827] text-white py-3 rounded-lg font-bold mb-3 hover:bg-black transition">
+          <button onClick={handleUpload} disabled={busy || !file}
+            className="w-full bg-[#111827] text-white py-3 rounded-lg font-bold mb-3 hover:bg-black transition disabled:opacity-50">
             1. Upload to Cloud Vault
           </button>
 
           {hash && (
-            <button onClick={saveToBlockchain} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition flex justify-center items-center gap-2">
+            <button onClick={saveToBlockchain} disabled={busy || !canSign}
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition flex justify-center items-center gap-2 disabled:opacity-50">
               <Lock className="w-4 h-4"/> 2. Sign & Issue on Chain
             </button>
           )}
+          {doc && <p className="mt-3 text-center text-xs text-slate-500">Status: {doc.status}{doc.failureReason ? ` (${doc.failureReason})` : ""}</p>}
 
           {status && <p className="mt-4 text-center text-slate-600 font-medium">{status}</p>}
         </div>

@@ -34,7 +34,7 @@ async function start(s3 = fakeS3(), overrides = {}) {
     const app = createApp({ s3, bucketName: 'test-bucket', region: 'ap-south-1', auth: TEST_AUTH,
         logger: createLogger({ logDir: null, silent: true }), presign: fakePresign, ...overrides });
     const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
-    return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
+    return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => { server.close(r); server.closeAllConnections(); }) };   // also drops hung requests, like a crash
 }
 
 async function loginToken(url, username = TEST_AUTH.adminUsername, password = TEST_PASSWORD) {

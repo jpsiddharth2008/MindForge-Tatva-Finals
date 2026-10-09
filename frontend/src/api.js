@@ -31,3 +31,25 @@ export async function anchorFile(formData) {
     throw err;
   }
 }
+
+// The blockchain step is reported to the server, which checks it against the chain itself.
+async function authedPost(path, body) {
+  try {
+    return (await axios.post(`${API_URL}${path}`, body, { headers: { Authorization: `Bearer ${token}` } })).data;
+  } catch (err) {
+    if (err.response?.status === 401) clearToken();
+    throw err;
+  }
+}
+
+/** A wallet transaction was sent. */
+export const chainPending = (documentId, transactionHash) =>
+  authedPost(`/api/documents/${documentId}/chain-pending`, { transactionHash });
+
+/** Ask the server to check the transaction on chain. Resolves to { state: 'issued' | 'pending' | 'failed', document }. */
+export const chainConfirmed = (documentId, transactionHash) =>
+  authedPost(`/api/documents/${documentId}/chain-confirmed`, { transactionHash });
+
+/** The wallet rejected or failed the transaction. */
+export const chainFailed = (documentId, reason) =>
+  authedPost(`/api/documents/${documentId}/chain-failed`, { reason });

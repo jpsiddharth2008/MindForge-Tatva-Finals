@@ -1,18 +1,7 @@
 // GET /api/health: the state of each component, never any credential, address or error text.
 // Each check resolves to 'ok' or 'not_configured'; throwing or timing out means 'down'.
 
-const TIMEOUT_MS = 3000;
-
-async function rpc(url, method, params, fetchFn) {
-    const res = await fetchFn(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    const body = await res.json();
-    if (body.error || body.result === undefined) throw new Error('rpc error');
-    return body.result;
-}
+const { rpc, TIMEOUT_MS } = require('./chain');
 
 /** Checks for the Polygon node and the deployed contract, from RPC_URL and CONTRACT_ADDRESS. */
 function chainChecks(env = process.env, fetchFn = fetch) {

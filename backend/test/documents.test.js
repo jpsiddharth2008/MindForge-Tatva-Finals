@@ -157,7 +157,7 @@ test('simultaneous uploads of the same bytes leave one record and every request 
     } finally { await api.close(); }
 });
 
-test('a FAILED or PENDING record is retried (same documentId, back to STORED), not treated as a duplicate', async () => {
+test('a FAILED record, or a PENDING one silent for a while, is retried (same documentId, back to STORED), not treated as a duplicate', async () => {
     const api = await start(fakeS3(), { documents });
     try {
         const { token } = await loginToken(api.url);
@@ -165,6 +165,8 @@ test('a FAILED or PENDING record is retried (same documentId, back to STORED), n
             await documents.model.deleteMany({});
             const bytes = pdf(`retry ${status}`);
             const old = await documents.create(record({ sha256: sha(bytes), s3Key: sha(bytes), status }));
+            // a PENDING row is only retried once it has been silent long enough to belong to a crashed request
+            await documents.model.collection.updateOne({ documentId: old.documentId }, { $set: { updatedAt: new Date(Date.now() - 5 * 60 * 1000) } });
             const body = await (await anchor(api, token, bytes)).json();
             assert.strictEqual(body.duplicate, false, status);
             assert.strictEqual(body.document.documentId, old.documentId);

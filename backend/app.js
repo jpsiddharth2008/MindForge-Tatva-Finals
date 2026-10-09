@@ -6,7 +6,9 @@ const { requestContext, errorHandler } = require('./errors');
 const helmet = require('helmet');
 const { singleFileUpload } = require('./uploads');
 const { createStorage, presignTtlFromEnv, sseFromEnv } = require('./storage');
-const { publicView, DuplicateDocumentError, DUPLICATE_STATUSES } = require('./documents');
+const { publicView } = require('./documents');
+const { createIssuance } = require('./issuance');
+const { createChain } = require('./chain');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
 
@@ -34,6 +36,8 @@ function createApp({
     documents,                                 // document records (documents.js). Without it, nothing is recorded.
     chainId,                                   // recorded on each document
     contractAddress,
+    chain = process.env.RPC_URL ? createChain({ rpcUrl: process.env.RPC_URL }) : null,   // read-only chain access; confirms transactions
+    issuanceOptions = {},                      // staleMs / stuckMs / now, for tests
 }) {
     // Fails closed: the app cannot be built without a valid auth configuration.
     const auth = createAuth(authConfig);
@@ -46,6 +50,7 @@ function createApp({
     app.use(express.json({ limit: '1mb' }));
 
     const storage = createStorage({ s3, bucketName, sse, presignTtlSeconds, presign });
+    const issuance = documents ? createIssuance({ documents, storage, chain, chainId, contractAddress, ...issuanceOptions }) : null;
     const fileLimit = limiter({ ...DEFAULT_LIMITS.files, ...rateLimits.files });
     const loginLimit = limiter({ ...DEFAULT_LIMITS.login, ...rateLimits.login });
 
@@ -78,54 +83,35 @@ function createApp({
             // 1. SHA-256 of the content. It is also the S3 key.
             const hash = sha256(file.buffer);
 
-            // 2. Duplicate check BEFORE anything is stored or anchored: an already-issued file is not stored or anchored again
-            let retry = null;
-            if (documents) {
-                const existing = await documents.findBySha256(hash);
-                if (existing && DUPLICATE_STATUSES.includes(existing.status)) {
-                    const { url, expiresInSeconds } = await storage.signedUrl(existing.s3Key);
-                    return res.json({
-                        success: true, duplicate: true, hash, s3Key: existing.s3Key, url, urlExpiresInSeconds: expiresInSeconds,
-                        document: publicView(existing), message: "This exact document was already stored. Nothing was written.",
-                    });
+            // 2a. With a database: the record is claimed (PENDING) before the upload, an identical file is never issued
+            //     twice, and every step leaves the record in a state that can be recovered (see issuance.js).
+            if (issuance) {
+                const r = await issuance.issue({
+                    hash, buffer: file.buffer, contentType: file.detectedMime, originalName: file.safeName,
+                    size: file.size, issuerName: req.user.sub,
+                });
+                if (r.outcome === 'in_progress') {
+                    return res.json({ success: true, duplicate: true, inProgress: true, hash, s3Key: r.key, document: publicView(r.document),
+                        message: "This document is already being processed. Check its status shortly." });
                 }
-                retry = existing;   // PENDING or FAILED: a retry of an earlier attempt
+                const { url, expiresInSeconds } = await storage.signedUrl(r.key);
+                const duplicate = r.outcome === 'duplicate';
+                return res.json({
+                    success: true, duplicate, hash, s3Key: r.key, url, urlExpiresInSeconds: expiresInSeconds,
+                    alreadyStored: duplicate ? true : r.alreadyStored, document: publicView(r.document),
+                    message: duplicate ? "This exact document was already stored. Nothing was written."
+                        : (r.alreadyStored ? "This exact file was already stored." : "File stored in AWS S3. Hash generated."),
+                });
             }
 
-            // 3. Store encrypted under that key (an identical file already there is left untouched)
+            // 2b. Without a database (not recommended): store only, nothing is recorded
             const { key, alreadyStored } = await storage.store({
                 hash, buffer: file.buffer, contentType: file.detectedMime, originalName: file.safeName,
             });
-
-            // 4. Record it: this row is what links the S3 object to the hash that goes on the chain
-            let document = null;
-            let duplicate = false;
-            if (documents) {
-                const fields = {
-                    sha256: hash, byteHash: hash, s3Key: key, originalFileName: file.safeName, mimeType: file.detectedMime,
-                    size: file.size, issuerName: req.user.sub, chainId, contractAddress, status: 'STORED',
-                };
-                try {
-                    document = retry ? await documents.restore(retry.documentId, fields) : await documents.create(fields);
-                } catch (err) {
-                    if (!(err instanceof DuplicateDocumentError)) throw err;
-                    document = await documents.findBySha256(hash);    // lost a race with another request for the same bytes
-                    duplicate = true;
-                }
-            }
-
-            // 5. Hand back a short-lived signed link; the bucket itself is private
             const { url, expiresInSeconds } = await storage.signedUrl(key);
-
             res.json({
-                success: true,
-                hash,
-                s3Key: key,
-                url,
-                urlExpiresInSeconds: expiresInSeconds,
-                alreadyStored,
-                duplicate,
-                document: publicView(document),
+                success: true, hash, s3Key: key, url, urlExpiresInSeconds: expiresInSeconds, alreadyStored,
+                duplicate: false, document: null,
                 message: alreadyStored ? "This exact file was already stored." : "File stored in AWS S3. Hash generated.",
             });
 
@@ -149,6 +135,26 @@ function createApp({
     app.get('/api/documents/by-hash/:value', auth.requireAuth, lookup(/^[a-f0-9]{64}$/, (v) => documents.findBySha256(v)));
     app.get('/api/documents/by-tx/:value', auth.requireAuth, lookup(/^0x[a-fA-F0-9]{64}$/, (v) => documents.findByTransactionHash(v)));
     app.get('/api/documents/:value', auth.requireAuth, lookup(/^[0-9a-f-]{36}$/, (v) => documents.findByDocumentId(v)));
+
+    // --- ROUTES: the blockchain step, reported by the officer's browser and verified against the chain (issuers only) ---
+    const chainStep = (handler) => async (req, res, next) => {
+        try {
+            if (!issuance) return res.status(503).json({ success: false, error: 'Document records are not available.', requestId: req.id });
+            if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            res.json(await handler(req));
+        } catch (err) { next(err); }
+    };
+    // A wallet transaction was sent: STORED -> BLOCKCHAIN_PENDING (repeating the same call is harmless)
+    app.post('/api/documents/:id/chain-pending', auth.requireAuth, chainStep(async (req) =>
+        ({ success: true, document: publicView(await issuance.markChainPending(req.params.id, req.user.sub, (req.body || {}).transactionHash)) })));
+    // Ask the server to check the transaction on chain: BLOCKCHAIN_PENDING -> ISSUED (or FAILED, or still pending)
+    app.post('/api/documents/:id/chain-confirmed', auth.requireAuth, chainStep(async (req) => {
+        const r = await issuance.confirmChain(req.params.id, req.user.sub, (req.body || {}).transactionHash);
+        return { success: true, state: r.state, document: publicView(r.document) };
+    }));
+    // The wallet rejected or failed the transaction: -> FAILED, so the record is not left looking half-issued
+    app.post('/api/documents/:id/chain-failed', auth.requireAuth, chainStep(async (req) =>
+        ({ success: true, document: publicView(await issuance.markChainFailed(req.params.id, req.user.sub, (req.body || {}).reason)) })));
 
     // --- ROUTE: Health (public, no secrets) ---
     app.get('/api/health', healthHandler({
