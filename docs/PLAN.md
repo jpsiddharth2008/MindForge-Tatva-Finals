@@ -560,7 +560,7 @@ Milestones M0–M6 match Section 6.1. The loader script creates them with due ti
 | A5 | Offline audit runner: first evidence and numbers | Dev A | P0 | 1.5 h | M2 | A4, B1, C1 |
 | A6 | Retry experiment harness: predicted vs observed breach | Dev A | P0 | 2 h | M3 | A5, C3 |
 | A7 | MRR v0.1 builder, grade and reproduce command | Dev A | P1 | 1.5 h | M4 | A6 |
-| A8 | Pitch numbers: 2x2 ablation table, defence cost, threshold trade-off | Dev A | P1 | 1 h | M4 | A7, B7 |
+| A8 | Pitch numbers: 2x2 ablation table, defence cost, threshold trade-off | Dev A | P0 | 1 h | M4 | A6 |
 | B1 | Hand-written corpus: 25 attacks and 15 benign look-alikes | Dev B | P0 | 2.5 h | M1 | D1 |
 | B2 | Channel fixtures and adapters: poisoned web pages and inbox emails | Dev B | P0 | 1.5 h | M1 | B1 |
 | B3 | Swarm: reader agents, executor, mock tools, privilege scoping, breach detector | Dev B | P0 | 2.5 h | M2 | A2, B2 |
@@ -575,7 +575,7 @@ Milestones M0–M6 match Section 6.1. The loader script creates them with due ti
 | C4 | Retry budget, lockout and escalation queue | Dev C | P0 | 1 h | M3 | C2 |
 | C5 | Streamlit demo console with replay mode | Dev C | P1 | 2.5 h | M4 | C2 |
 | C6 | Rich terminal fallback console | Dev C | P1 | 0.75 h | M4 | C5 |
-| C7 | Demo runbook and fallback video | Dev C | P1 | 1 h | M5 | C5, D5 |
+| C7 | Demo runbook and fallback video | Dev C | P0 | 1 h | M5 | D5 |
 | C8 | (Stretch) Shingle-similarity stickiness | Dev C | P2 | 1 h | M4 | C3 |
 | C9 | (Stretch) Second, off-the-shelf guard model as the monitor | Dev C | P2 | 1 h | M4 | C1, A5 |
 | D1 | Repo, labels, milestones, board and CODEOWNERS | Member D | P0 | 0.5 h | M0 | — |
@@ -736,7 +736,7 @@ Owns the numbers. Everything Dev A builds can be tested with SimJudge before the
 - [ ] Predicted Breach@N for N = 1, 3, 5, 10, 20 from A5's per-payload block rates: the mean over payloads, with a bootstrap interval.
 - [ ] Offline simulation through any Gateway: R1 = the same message with a new sample index; R2 is approximated by cycling through the rewordings.
 - [ ] Configurations: off, single, single + sticky, retry_aware without sticky, retry_aware (full).
-- [ ] When B6's live evidence lands: observed breach within N attempts, a predicted-vs-observed plot, and the mean absolute gap.
+- [ ] Soft dependency on B6 (not blocking): when B6's live evidence lands: observed breach within N attempts, a predicted-vs-observed plot, and the mean absolute gap.
 
 **Acceptance criteria**
 
@@ -767,7 +767,7 @@ Owns the numbers. Everything Dev A builds can be tested with SimJudge before the
 
 ### A8 · Pitch numbers: 2x2 ablation table, defence cost, threshold trade-off
 
-**Dev A** · P1 · 1 h · Milestone M4 · Depends on: A7, B7 · Labels: area:measurement, type:experiment
+**Dev A** · P0 · 1 h · Milestone M4 · Depends on: A6 · Labels: area:measurement, type:experiment
 
 **Why:** Every number on stage has to trace back to a file.
 
@@ -775,7 +775,7 @@ Owns the numbers. Everything Dev A builds can be tested with SimJudge before the
 
 **Tasks**
 
-- [ ] 2 x 2 table from B7: attack success with the monitor on or off x privilege scoping on or off, and which layer stopped each attack (monitor, executor refusal, privilege denial).
+- [ ] If B7 evidence exists, a 2 x 2 table from B7 (otherwise mark it [not run]): attack success with the monitor on or off x privilege scoping on or off, and which layer stopped each attack (monitor, executor refusal, privilege denial).
 - [ ] Defence cost per gateway configuration: benign false-block rate and escalations per 100 messages.
 - [ ] Threshold sweep (0.6, 0.8, 1.0) -> trade-off chart of attacks let through vs benign messages blocked.
 - [ ] pitch_numbers.md: every number with its evidence file and run_id. Hand it to Member D by 07:30.
@@ -1091,7 +1091,7 @@ Owns the firewall under study, the fix, and what judges see on screen.
 
 ### C7 · Demo runbook and fallback video
 
-**Dev C** · P1 · 1 h · Milestone M5 · Depends on: C5, D5 · Labels: area:guard, type:docs
+**Dev C** · P0 · 1 h · Milestone M5 · Depends on: D5 · Labels: area:guard, type:docs
 
 **Why:** A recorded fallback is mandatory. Record it while everything works.
 
@@ -1099,6 +1099,7 @@ Owns the firewall under study, the fix, and what judges see on screen.
 
 **Tasks**
 
+- [ ] Use the Streamlit console (C5) if it works, otherwise the terminal console (C6) or fixtures replayed by hand.
 - [ ] Runbook: the exact commands for each act, in order, and what to do if a step fails.
 - [ ] Record the full five-act demo with screen and voice by 09:30, using Member D's script.
 

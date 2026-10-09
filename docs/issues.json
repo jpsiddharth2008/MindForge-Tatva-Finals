@@ -327,7 +327,7 @@
         "Predicted Breach@N for N = 1, 3, 5, 10, 20 from A5's per-payload block rates: the mean over payloads, with a bootstrap interval.",
         "Offline simulation through any Gateway: R1 = the same message with a new sample index; R2 is approximated by cycling through the rewordings.",
         "Configurations: off, single, single + sticky, retry_aware without sticky, retry_aware (full).",
-        "When B6's live evidence lands: observed breach within N attempts, a predicted-vs-observed plot, and the mean absolute gap."
+        "Soft dependency on B6 (not blocking): when B6's live evidence lands: observed breach within N attempts, a predicted-vs-observed plot, and the mean absolute gap."
       ],
       "acceptance": [
         "With SimJudge, the simulated breach matches the formula within 2 percentage points.",
@@ -371,12 +371,11 @@
       "id": "A8",
       "owner": "A",
       "title": "Pitch numbers: 2x2 ablation table, defence cost, threshold trade-off",
-      "priority": "P1",
+      "priority": "P0",
       "estimate": 1.0,
       "milestone": "M4",
       "depends": [
-        "A7",
-        "B7"
+        "A6"
       ],
       "labels": [
         "area:measurement",
@@ -389,7 +388,7 @@
         "reports/tradeoff.png"
       ],
       "tasks": [
-        "2 x 2 table from B7: attack success with the monitor on or off x privilege scoping on or off, and which layer stopped each attack (monitor, executor refusal, privilege denial).",
+        "If B7 evidence exists, a 2 x 2 table from B7 (otherwise mark it [not run]): attack success with the monitor on or off x privilege scoping on or off, and which layer stopped each attack (monitor, executor refusal, privilege denial).",
         "Defence cost per gateway configuration: benign false-block rate and escalations per 100 messages.",
         "Threshold sweep (0.6, 0.8, 1.0) -> trade-off chart of attacks let through vs benign messages blocked.",
         "pitch_numbers.md: every number with its evidence file and run_id. Hand it to Member D by 07:30."
@@ -845,11 +844,10 @@
       "id": "C7",
       "owner": "C",
       "title": "Demo runbook and fallback video",
-      "priority": "P1",
+      "priority": "P0",
       "estimate": 1.0,
       "milestone": "M5",
       "depends": [
-        "C5",
         "D5"
       ],
       "labels": [
@@ -862,6 +860,7 @@
         "demo/fallback.mp4 (or a link if it's too large)"
       ],
       "tasks": [
+        "Use the Streamlit console (C5) if it works, otherwise the terminal console (C6) or fixtures replayed by hand.",
         "Runbook: the exact commands for each act, in order, and what to do if a step fails.",
         "Record the full five-act demo with screen and voice by 09:30, using Member D's script."
       ],
