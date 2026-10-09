@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "required": ["mrr_version", "corpus_sha256", "seed", "models", "run_ids", "audit", "breach",
+               "gateways", "monitor_marginal_contribution", "evidence_files", "reproduce"],
+  "properties": {
+    "mrr_version": {"type": "string", "enum": ["0.1"]},
+    "corpus_sha256": {"type": "string"},
+    "seed": {"type": "integer"},
+    "models": {"type": "object"},
+    "run_ids": {"type": "object", "required": ["audit", "retry"]},
+    "audit": {
+      "type": "object",
+      "required": ["items", "malicious", "benign", "block_rate_by_category", "bucket_counts",
+                   "benign_false_block_rate", "escalations_per_100", "escaped_attacks",
+                   "parse_error_rate", "axes"],
+      "properties": {
+        "items": {"type": "integer"},
+        "malicious": {"type": "integer"},
+        "benign": {"type": "integer"},
+        "block_rate_by_category": {
+          "type": "object",
+          "additionalProperties": {"type": "object",
+                                   "required": ["items", "block_rate", "wilson_lo", "wilson_hi"]}
+        },
+        "bucket_counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+        "benign_false_block_rate": {"type": ["number", "null"]},
+        "escalations_per_100": {"type": "number"},
+        "escaped_attacks": {"type": "integer"},
+        "parse_error_rate": {"type": "number"},
+        "axes": {"type": "object"}
+      }
+    },
+    "breach": {
+      "type": "object",
+      "required": ["predicted", "observed"],
+      "properties": {
+        "predicted": {"type": "object",
+                      "additionalProperties": {"type": "object", "required": ["breach", "ebp", "lo", "hi"]}},
+        "observed": {"type": "object"}
+      }
+    },
+    "gateways": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["breach_at_5", "benign_false_block_rate", "escalations_per_100",
+                     "parse_error_rate", "grade", "grade_cap"],
+        "properties": {"grade": {"type": "string", "enum": ["A", "B", "C", "D", "F"]}}
+      }
+    },
+    "monitor_marginal_contribution": {"type": ["string", "object"]},
+    "evidence_files": {"type": "object", "additionalProperties": {"type": "string"}},
+    "reproduce": {"type": "string"}
+  }
+}
