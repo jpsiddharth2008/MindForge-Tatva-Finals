@@ -16,7 +16,10 @@ const { buildQrPayload } = require('./qr');
 const { stampQr } = require('./stamp');
 const { STATUSES } = require('./documents');
 const { TEMPLATE } = require('./extract');
-const { contentHash: computeContentHash, lookupKey: computeLookupKey, FieldError } = require('./content-hash');
+const { contentHash: computeContentHash, lookupKey: computeLookupKey, FieldError, REQUIRED: REQUIRED_FIELDS } = require('./content-hash');
+
+/** Treated as "not supplied": undefined, null, or whitespace. */
+const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 const { ACTIONS, OUTCOMES } = require('./audit');
 const { corsAllowlist, limiter, DEFAULT_LIMITS, originsFromEnv } = require('./security');
 const { healthHandler, chainChecks } = require('./health');
@@ -117,6 +120,36 @@ function createApp({
         if (raw === undefined || raw === '') return null;
         let parsed;
         try { parsed = JSON.parse(raw); } catch { throw Object.assign(new Error('bad fields'), { status: 400, publicMessage: 'The document details must be valid JSON.' }); }
+
+        // The officer may send only the details they are attesting to (the holder and date of
+        // birth, say). Everything else required by the hash is READ OFF THE DOCUMENT rather than
+        // typed again - it is printed right there, and retyping it only invites typos that would
+        // make the genuine document unverifiable.
+        //
+        // The officer's own entries are still authoritative: they are never overwritten, and
+        // compareToAnchor below still refuses the issuance if what they typed confidently
+        // contradicts what is printed. Reading is only allowed to FILL GAPS.
+        let readFromDocument = [];
+        if (file.detectedMime !== 'application/pdf' && REQUIRED_FIELDS.some((k) => isBlank(parsed[k]))) {
+            const reading = await analyse(file.buffer);
+            if (reading.status !== 'READ') {
+                const names = (reading.problems || []).map((p) => p.field).join(', ');
+                throw Object.assign(new Error('unreadable'), {
+                    status: 422,
+                    publicMessage: `Some details were left blank and could not be read from the document${names ? ` (${names})` : ''}. Enter them, or upload a clearer capture.`,
+                });
+            }
+            for (const key of REQUIRED_FIELDS) {
+                if (!isBlank(parsed[key])) continue;
+                if (isBlank(reading.fields[key])) continue;
+                parsed[key] = reading.fields[key];
+                readFromDocument.push(key);
+            }
+            // Extra printed claims (dob, programme…) must be part of the hash too, or an added
+            // claim would not change it. Anything the officer typed still wins.
+            parsed.payload = { ...(reading.fields.payload || {}), ...(parsed.payload || {}) };
+        }
+
         let computed;
         try { computed = computeContentHash(parsed); } catch (err) {
             if (!(err instanceof FieldError)) throw err;
@@ -133,7 +166,11 @@ function createApp({
             }
             ocrCheck = result.status === 'MATCH' ? 'MATCH' : 'INCONCLUSIVE';
         }
-        return { contentHash: computed.hash, lookupKey: computeLookupKey(computed.record), record: computed.record, ocrCheck };
+        return {
+            contentHash: computed.hash, lookupKey: computeLookupKey(computed.record),
+            record: computed.record, ocrCheck,
+            readFromDocument,   // which fields the officer did not type; surfaced so they can be shown for confirmation
+        };
     }
 
     // --- ROUTE: Hash & store (issuance) ---

@@ -7,15 +7,23 @@ import { runAnchorFlow } from '../flows';
 import { chainConfigured } from '../chain';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';
-const EMPTY = { issuer: '', docType: '', holder: '', idNumber: '', issuedOn: '', dob: '', programme: '', cgpa: '' };
-const REQUIRED = [['issuer', 'Issuing institution'], ['docType', 'Document type'], ['holder', 'Holder'], ['idNumber', 'ID number'], ['issuedOn', 'Issued on']];
-const OPTIONAL = [['dob', 'Date of birth'], ['programme', 'Programme'], ['cgpa', 'CGPA']];
+const EMPTY = { holder: '', dob: '' };
 
-/** What the server needs: the five required details, and anything else printed on the document under `payload`. */
+// The officer attests to WHO the document belongs to. Everything else the hash needs - the
+// issuing institution, document type, ID number and date of issue - is printed on the document
+// and is read off it by the server (see tier2For in backend/app.js). Retyping printed text only
+// invites typos, and a typo at issuance produces a hash the genuine document can never match.
+//
+// These two are still cross-checked against the print: if what the officer types confidently
+// disagrees with what the document says, the issuance is refused.
+const REQUIRED = [['holder', 'Holder']];
+const OPTIONAL = [['dob', 'Date of birth']];
+
+/** Only what the officer typed. Blank required fields are filled from the document by the server. */
 export function buildFields(form) {
   const payload = {};
-  for (const [key] of OPTIONAL) if (form[key].trim()) payload[key] = form[key].trim();
-  return { issuer: form.issuer, docType: form.docType, holder: form.holder, idNumber: form.idNumber, issuedOn: form.issuedOn, payload };
+  if (form.dob.trim()) payload.dob = form.dob.trim();
+  return { holder: form.holder.trim(), payload };
 }
 
 /** Issuing: enter the document's details, upload it, sign with the wallet, get the QR code. Each step says what is happening. */
@@ -74,9 +82,16 @@ export default function Issue() {
   return (
     <Layout narrow title="Issue a document">
       <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
-        <p className="text-sm text-slate-600">Enter the details exactly as printed on the document. They are read back from the document and must agree with it.</p>
-        {REQUIRED.map(([k, label]) => input(k, label, true, k === 'issuedOn' ? { placeholder: 'e.g. 15 Jun 2026' } : {}))}
-        {OPTIONAL.map(([k, label]) => input(k, label, false))}
+        <p className="text-sm text-slate-600">
+          Enter the holder&rsquo;s details exactly as printed. Everything else &mdash; institution, document
+          type, ID number and date of issue &mdash; is read off the document itself.
+        </p>
+        {REQUIRED.map(([k, label]) => input(k, label, true))}
+        {/* A date picker rather than free text: it yields YYYY-MM-DD, which removes the
+            day-first/month-first ambiguity entirely. "01/02/2005" is two different dates
+            depending on who typed it, and the wrong reading silently changes the hash.
+            max=today because nobody is born in the future. */}
+        {OPTIONAL.map(([k, label]) => input(k, label, false, { type: 'date', max: new Date().toISOString().slice(0, 10) }))}
         <div>
           <label className="block text-sm font-semibold mb-1" htmlFor="f-file">The document *</label>
           <input id="f-file" type="file" accept={ACCEPT} onChange={(e) => setFile(e.target.files?.[0] || null)} className="block w-full text-sm text-slate-500 border border-dashed border-slate-300 rounded-lg p-3" />

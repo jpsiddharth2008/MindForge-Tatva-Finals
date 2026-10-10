@@ -29,8 +29,10 @@ beforeEach(() => {
 });
 
 describe('Issue page', () => {
+  // The officer types only who the document belongs to. The institution, document type, ID
+  // number and date of issue are printed on the document, and the server reads them off it.
   const fill = async (user, over = {}) => {
-    const v = { 'Issuing institution': 'NIT Calicut', 'Document type': 'Degree Certificate', Holder: 'Asha Menon', 'ID number': 'B210123CS', 'Issued on': '15 Jun 2026', ...over };
+    const v = { Holder: 'Asha Menon', 'Date of birth': '2005-04-12', ...over };
     for (const [label, value] of Object.entries(v)) if (value) await user.type(screen.getByLabelText(new RegExp(`^${label}`)), value);
   };
   const upload = (user) => user.upload(screen.getByLabelText(/^The document/), new File(['x'], 'cert.png', { type: 'image/png' }));
@@ -48,9 +50,13 @@ describe('Issue page', () => {
     expect(submit).toBeEnabled();
   });
 
-  it('builds the fields the server expects: required ones at the top, optional ones under payload, blanks left out', () => {
-    expect(buildFields({ issuer: 'I', docType: 'D', holder: 'H', idNumber: 'N', issuedOn: '2026-06-15', dob: ' 12-04-2005 ', programme: '', cgpa: '8.7' }))
-      .toEqual({ issuer: 'I', docType: 'D', holder: 'H', idNumber: 'N', issuedOn: '2026-06-15', payload: { dob: '12-04-2005', cgpa: '8.7' } });
+  it('sends only what the officer typed, trimmed, with a blank date of birth left out entirely', () => {
+    expect(buildFields({ holder: '  Asha Menon ', dob: ' 12-04-2005 ' }))
+      .toEqual({ holder: 'Asha Menon', payload: { dob: '12-04-2005' } });
+    // A blank must be ABSENT, not empty: the server fills absent required fields from the
+    // document, and an empty string would instead read as "the officer says this is blank".
+    expect(buildFields({ holder: 'Asha Menon', dob: '   ' }))
+      .toEqual({ holder: 'Asha Menon', payload: {} });
   });
 
   it('stores, signs, and shows the QR code for an issued document', async () => {
@@ -65,7 +71,11 @@ describe('Issue page', () => {
     expect(await screen.findByText(/Issued and anchored/)).toBeInTheDocument();
     expect(screen.getByTestId('qr')).toHaveAttribute('data-value', '{"v":1}');
     expect(flows.runAnchorFlow).toHaveBeenCalledWith({ documentId: ID, contentHash: 'c'.repeat(64), sha256: 'b'.repeat(64) }, expect.any(Function));
-    expect(api.anchorFile.mock.calls[0][1]).toMatchObject({ holder: 'Asha Menon', idNumber: 'B210123CS' });
+    // No idNumber: the officer never types it, so it must not be sent. The server reads it
+    // off the document, which is the only place it is authoritative.
+    const sent = api.anchorFile.mock.calls[0][1];
+    expect(sent).toMatchObject({ holder: 'Asha Menon', payload: { dob: '2005-04-12' } });
+    expect(sent).not.toHaveProperty('idNumber');
     expect(screen.getByRole('link', { name: 'Open this document' })).toHaveAttribute('href', `/officer/documents/${ID}`);
   });
 
