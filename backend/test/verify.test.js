@@ -426,3 +426,42 @@ test('a textured photograph is still checked: a swapped photo is flagged and not
         assert.deepStrictEqual(ok.body.tiers.visual.unreliableRegions, []);
     } finally { await s.close(); }
 });
+
+test('a tampered DATABASE cannot falsify the anchored values a verifier is shown', async () => {
+    // The threat: an operator with database access edits canonicalRecord so the diff reports a
+    // different "true" value, while the verdict stays correct because that comes from the hashes.
+    // The stored record is re-hashed and checked against the content hash already on chain.
+    const s = await api(fakeChain());
+    try {
+        const png = await original();
+        const doc = await s.issue(png, c.DEFAULT_FIELDS);
+
+        // Rewrite the stored record WITHOUT touching contentHash: the document now claims it was
+        // issued to someone else, and nothing on chain has changed.
+        await documents.model.updateOne(
+            { documentId: doc.documentId },
+            { $set: { 'canonicalRecord.holder': 'SOMEONE ELSE' } }
+        );
+
+        const forged = await c.paintOver(png, 'dob', 'DOB: 12-04-2003');
+        const { body } = await s.verify(forged, { withToken: true });
+
+        assert.strictEqual(body.tiers.content.anchoredRecordVerified, false,
+            'the edit must be detected: the stored record no longer hashes to the anchored value');
+        // The planted value must not reach the verifier.
+        assert.ok(!JSON.stringify(body).includes('SOMEONE ELSE'), 'a planted value was shown as anchored');
+    } finally { await s.close(); }
+});
+
+test('an untouched record is confirmed against the chain and its anchored values are still shown', async () => {
+    const s = await api(fakeChain());
+    try {
+        const png = await original();
+        await s.issue(png, c.DEFAULT_FIELDS);
+        const forged = await c.paintOver(png, 'dob', 'DOB: 12-04-2003');
+        const { body } = await s.verify(forged, { withToken: true });
+
+        assert.strictEqual(body.tiers.content.anchoredRecordVerified, true);
+        assert.strictEqual(body.tiers.content.fieldDiffs[0].anchored, '2005-04-12', 'the real value must still be reported');
+    } finally { await s.close(); }
+});

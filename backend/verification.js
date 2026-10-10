@@ -10,11 +10,35 @@ const crypto = require('crypto');
 const forensics = require('./forensics');
 const { compareToAnchor } = require('./tier2');
 const { compareVisual, advice } = require('./phash');
-const { flatRecord } = require('./content-hash');
+const { flatRecord, contentHash: recomputeContentHash } = require('./content-hash');
 const { parseQrPayload, pointsHere } = require('./qr');
 
 const ANCHORED = ['ISSUED', 'REVOKED'];          // the statuses of a document that really is on the registry
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+
+/**
+ * Does the stored canonical record still hash to the content hash that is on the chain?
+ *
+ * The VERDICT never depends on this: it is decided by comparing hashes the registry confirms.
+ * But the FIELD-LEVEL DIFF does - "anchored 2005-04-12, presented 2003-04-12" is read straight
+ * out of the database. Nothing else re-derives it, so anyone able to edit the database could
+ * change what a verifier is told the true value was, while the verdict stayed correct.
+ *
+ * Recomputing closes that: the content hash is already on chain, so the stored record can be
+ * checked against it without touching the contract.
+ *
+ * A false result is not proof of tampering - bumping content-hash.js's VERSION_TAG would also
+ * invalidate every record written under the old rules. Either way the stored values are no
+ * longer known to be what was anchored, so they must not be shown as if they were.
+ */
+function anchoredRecordIsTrustworthy(record) {
+    if (!record || !record.canonicalRecord || !record.contentHash) return false;
+    try {
+        return recomputeContentHash(record.canonicalRecord).hash === record.contentHash;
+    } catch {
+        return false;      // a record that cannot even be canonicalised cannot be vouched for
+    }
+}
 
 /** An error whose message is safe to show the client. */
 class VerificationError extends Error {
@@ -33,7 +57,7 @@ class VerificationError extends Error {
  * @param {function} o.analyse  Tier 2: image bytes -> analysis (tier2.analyseImage)
  * @param {function} o.visualise Tier 3: image bytes -> look-hash (phash.analyseVisual)
  */
-function createVerification({ documents, chain = null, analyse, visualise, chainId, contractAddress, thresholds }) {
+function createVerification({ documents, chain = null, analyse, visualise, chainId, contractAddress, thresholds, logger = console }) {
     // What the registry says about a content hash. The chain, when we have it, is the authority; the database is the fallback.
     async function registryState(record) {
         if (!record) return null;
@@ -122,12 +146,19 @@ function createVerification({ documents, chain = null, analyse, visualise, chain
                 // a field the anchor has and the document lacks was missed with certainty (that is how a MISMATCH is declared); the others use their reading confidence
                 ocrConfidence = Math.min(...cmp.fieldDiffs.map((d) => (typeof analysis.confidences[d.field] === 'number' ? analysis.confidences[d.field] : (d.presented === null ? 100 : 0)))) / 100;
             }
+            // The verdict below is decided by hashes the chain confirms, so it stands either way.
+            // The stored field VALUES are only shown when they still hash to what was anchored.
+            const trustworthy = anchoredRecordIsTrustworthy(record);
+            if (!trustworthy) {
+                logger.warn?.('stored canonical record does not match the anchored content hash', { documentId: record.documentId });
+            }
             content = {
-                anchored: flatRecord(record.canonicalRecord),
+                anchored: trustworthy ? flatRecord(record.canonicalRecord) : {},
                 presented: analysis.status === 'READ' ? flatRecord(analysis.record) : {},
                 ocrConfidence,
+                anchoredRecordVerified: trustworthy,
             };
-            if (analysis.status !== 'READ') content.presented = flatRecord(record.canonicalRecord);   // nothing was read: do not invent differences
+            if (analysis.status !== 'READ') content.presented = trustworthy ? flatRecord(record.canonicalRecord) : {};   // nothing was read: do not invent differences
         }
         if (record && record.visual && isImage) {
             try {

@@ -67,7 +67,7 @@ function createApp({
     const storage = createStorage({ s3, bucketName, sse, presignTtlSeconds, presign });
     // Auditing is best effort: audit.record() swallows its own errors, and with no audit configured this does nothing.
     const record = (req, event) => (audit ? audit.record({ ip: req.ip, ...event }) : Promise.resolve(false));
-    const verification = documents ? createVerification({ documents, chain, analyse, visualise, chainId, contractAddress }) : null;
+    const verification = documents ? createVerification({ documents, chain, analyse, visualise, chainId, contractAddress, logger }) : null;
     const verifyLimit = limiter({ ...DEFAULT_LIMITS.verify, ...rateLimits.verify });
     const issuance = documents ? createIssuance({ documents, storage, chain, chainId, contractAddress, ...issuanceOptions }) : null;
     const fileLimit = limiter({ ...DEFAULT_LIMITS.files, ...rateLimits.files });
