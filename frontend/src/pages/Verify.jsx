@@ -30,27 +30,27 @@ export default function Verify({ Scanner }) {
   return (
     <Layout narrow title="Verify a document">
       <div className="flex items-center gap-3 mb-4">
-        <ShieldCheck className="w-8 h-8 text-slate-700" aria-hidden />
-        <p className="text-sm text-slate-600">Upload the document or a photo of it (PDF, PNG or JPEG). It is checked in memory and never stored.</p>
+        <ShieldCheck className="w-8 h-8 text-ink-soft" aria-hidden />
+        <p className="text-label text-ink-soft">Upload the document or a photo of it (PDF, PNG or JPEG). It is checked in memory and never stored.</p>
       </div>
-      <label className="block text-sm font-semibold mb-1" htmlFor="doc">The document</label>
+      <label className="field-label" htmlFor="doc">The document</label>
       <input id="doc" type="file" accept={ACCEPT} onChange={(e) => { setFile(e.target.files?.[0] || null); setReport(null); setError(''); }}
-        className="block w-full text-sm text-slate-500 border border-dashed border-slate-300 rounded-lg p-3 mb-4" />
+        className="field-file mb-4" />
 
       <details className="mb-4" open={!!qr}>
         <summary className="text-sm font-semibold cursor-pointer">The document has a QR code (optional)</summary>
-        <p className="text-xs text-slate-600 my-2">A QR code is checked <em>against the document itself</em>. A real code copied onto a different document is rejected.</p>
+        <p className="text-xs text-ink-soft my-2">A QR code is checked <em>against the document itself</em>. A real code copied onto a different document is rejected.</p>
         <QrScanner onResult={setQr} Scanner={Scanner} />
         <label className="block text-xs font-semibold mt-3" htmlFor="qrtext">QR code text</label>
         <textarea id="qrtext" value={qr} onChange={(e) => setQr(e.target.value)} rows={2} placeholder="Filled in when you scan a code, or paste its text"
-          className="w-full text-xs border border-slate-300 rounded-lg p-2 font-mono" />
+          className="w-full text-xs border border-line-strong rounded-lg p-2 font-mono" />
       </details>
 
-      <button onClick={run} disabled={!file || busy} className="w-full bg-[#111827] text-white py-3 rounded-lg font-bold hover:bg-black disabled:opacity-50">
+      <button onClick={run} disabled={!file || busy} className="btn-primary btn-block py-3">
         {busy ? 'Checking…' : 'Verify'}
       </button>
       <div aria-live="polite" className="mt-4">
-        {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
+        {error && <p role="alert" className="text-label font-medium text-verdict-content">{error}</p>}
         <VerdictCard report={report} />
       </div>
     </Layout>

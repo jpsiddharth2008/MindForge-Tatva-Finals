@@ -70,7 +70,10 @@ describe('routing and access', () => {
     await logIn(user);
     expect(await screen.findByRole('heading', { name: 'Your documents' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Log out' }));
-    expect(screen.getByRole('heading', { name: 'MindForge' })).toBeInTheDocument();   // back on the home page
+    // Back on the home page. Its h1 describes the page, not the product: "MindForge"
+    // is the brand and already sits in the header, so repeating it as a heading
+    // would leave the landing page with no heading that says what it is for.
+    expect(screen.getByRole('heading', { name: /authorised institution registered/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Your documents' })).toBeNull();
     expect(within(screen.getByRole('navigation')).getByRole('link', { name: 'Officer login' })).toBeInTheDocument();
   });
@@ -194,7 +197,9 @@ describe('public verification page', () => {
     render(<MemoryRouter><AuthProvider><Verify /></AuthProvider></MemoryRouter>);
     await user.upload(screen.getByLabelText('The document'), png());
     await user.click(screen.getByRole('button', { name: 'Verify' }));
-    await screen.findByText('Revoked', { selector: 'div' });
+    // The verdict title is the card's heading, and "Revoked" is also the
+    // sub-panel's heading, so match on the level rather than on a tag name.
+    await screen.findByRole('heading', { name: 'Revoked', level: 2 });
     await user.upload(screen.getByLabelText('The document'), new File(['y'], 'other.png', { type: 'image/png' }));
     expect(screen.queryByTestId('revocation')).toBeNull();
   });

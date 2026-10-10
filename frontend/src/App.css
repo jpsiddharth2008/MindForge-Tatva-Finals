@@ -2,7 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  background-color: #344155; /* Matches the dark slate background */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+
+  /* A visible focus ring on keyboard navigation only, so mouse users do not
+     see rings on every click but the page stays fully operable by keyboard.
+     Tailwind's Preflight removes the default outline; without this, tabbing
+     through the verify form shows nothing at all. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2;
+    --tw-ring-offset-color: theme('colors.paper.DEFAULT');
+  }
+
+  /* On the dark chrome the offset must match it, or the ring is drawn on a
+     white halo that is not there. */
+  header :focus-visible,
+  .on-canvas :focus-visible {
+    --tw-ring-offset-color: theme('colors.canvas.DEFAULT');
+  }
+
+  /* Hashes, addresses and QR payloads are compared character by character.
+     Tabular figures keep digits in fixed columns so a changed one is visible. */
+  code, pre, .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Honour the OS setting. The verdict card and scanner animate; for anyone who
+     has asked for less motion, that is a reason not to use the tool. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Shared element styles. Deliberately plain CSS classes rather than React
+     components: the markup stays readable, and nothing here needs state. */
+
+  .sheet {
+    @apply bg-paper rounded-lg shadow-sheet border border-line;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded px-4 py-2.5
+           text-sm font-semibold transition-colors
+           disabled:opacity-45 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-accent text-white hover:bg-accent-hover; }
+  .btn-secondary { @apply btn bg-paper text-ink border border-line-strong hover:bg-paper-sunk; }
+  .btn-ghost { @apply btn bg-transparent text-ink-soft hover:text-ink hover:bg-paper-sunk; }
+  .btn-block { @apply w-full; }
+
+  .field {
+    @apply w-full rounded border border-line-strong bg-paper px-3 py-2 text-sm text-ink
+           placeholder:text-ink-faint
+           focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25;
+  }
+
+  .field-label {
+    @apply block text-label font-semibold text-ink mb-1.5;
+  }
+
+  /* A dashed well reads as "drop a file here" without needing an illustration. */
+  .field-file {
+    @apply block w-full rounded border border-dashed border-line-strong bg-paper-sunk
+           p-4 text-sm text-ink-soft
+           file:mr-3 file:rounded file:border-0 file:bg-ink file:px-3 file:py-1.5
+           file:text-xs file:font-semibold file:text-white hover:file:bg-ink/90
+           file:cursor-pointer;
+  }
+
+  .hint { @apply text-label text-ink-soft; }
 }

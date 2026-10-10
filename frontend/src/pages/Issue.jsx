@@ -74,15 +74,15 @@ export default function Issue() {
 
   const input = (key, label, required, props = {}) => (
     <div key={key}>
-      <label className="block text-sm font-semibold mb-1" htmlFor={`f-${key}`}>{label}{required && <span aria-hidden> *</span>}</label>
-      <input id={`f-${key}`} value={form[key]} onChange={set(key)} className="w-full border border-slate-300 rounded-lg px-3 py-2" {...props} />
+      <label className="field-label" htmlFor={`f-${key}`}>{label}{required && <span aria-hidden> *</span>}</label>
+      <input id={`f-${key}`} value={form[key]} onChange={set(key)} className="field" {...props} />
     </div>
   );
 
   return (
     <Layout narrow title="Issue a document">
       <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
-        <p className="text-sm text-slate-600">
+        <p className="text-label text-ink-soft">
           Enter the holder&rsquo;s details exactly as printed. Everything else &mdash; institution, document
           type, ID number and date of issue &mdash; is read off the document itself.
         </p>
@@ -93,29 +93,29 @@ export default function Issue() {
             max=today because nobody is born in the future. */}
         {OPTIONAL.map(([k, label]) => input(k, label, false, { type: 'date', max: new Date().toISOString().slice(0, 10) }))}
         <div>
-          <label className="block text-sm font-semibold mb-1" htmlFor="f-file">The document *</label>
-          <input id="f-file" type="file" accept={ACCEPT} onChange={(e) => setFile(e.target.files?.[0] || null)} className="block w-full text-sm text-slate-500 border border-dashed border-slate-300 rounded-lg p-3" />
+          <label className="field-label" htmlFor="f-file">The document *</label>
+          <input id="f-file" type="file" accept={ACCEPT} onChange={(e) => setFile(e.target.files?.[0] || null)} className="field-file" />
         </div>
-        {missing.length > 0 && (file || Object.values(form).some(Boolean)) && <p className="text-xs text-slate-500">Still needed: {missing.join(', ')}{file ? '' : ', the document'}.</p>}
-        <button type="submit" disabled={!ready} className="bg-[#111827] text-white py-3 rounded-lg font-bold hover:bg-black disabled:opacity-50">
+        {missing.length > 0 && (file || Object.values(form).some(Boolean)) && <p className="text-micro text-ink-faint">Still needed: {missing.join(', ')}{file ? '' : ', the document'}.</p>}
+        <button type="submit" disabled={!ready} className="btn-primary btn-block py-3">
           {busy ? 'Working…' : 'Issue the document'}
         </button>
       </form>
 
       <div aria-live="polite" className="mt-4">
-        {busy && step && <p role="status" className="text-slate-700">{step}</p>}
-        {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
+        {busy && step && <p role="status" className="text-ink-soft">{step}</p>}
+        {error && <p role="alert" className="text-label font-medium text-verdict-content">{error}</p>}
         {result?.state === 'issued' && (
-          <div className="border border-green-300 bg-green-50 rounded-lg p-4 mt-2">
-            <p className="font-bold text-green-900 mb-2">Issued and anchored on the blockchain.</p>
+          <div className="mt-2 rounded border border-verdict-original/30 bg-verdict-original-bg p-4">
+            <p className="mb-2 font-semibold text-verdict-original">Issued and anchored on the blockchain.</p>
             {result.qr
               ? <><p className="text-sm mb-2">Print this QR code on the document. It holds only a fingerprint, never personal details.</p><QrCode payload={result.qr} /></>
               : <p className="text-sm">The QR code could not be loaded now; it is available on the document's page.</p>}
           </div>
         )}
-        {result?.state === 'pending' && <p className="text-amber-800 text-sm">The transaction is not confirmed yet. Its status will update on the document's page.</p>}
-        {result?.state === 'failed' && <p className="text-red-700 text-sm">The transaction did not succeed ({result.document?.failureReason || 'unknown reason'}). Nothing was issued.</p>}
-        {result?.document?.documentId && <Link to={`/officer/documents/${result.document.documentId}`} className="inline-block mt-2 text-blue-700 font-semibold underline">Open this document</Link>}
+        {result?.state === 'pending' && <p className="text-label text-verdict-visual">The transaction is not confirmed yet. Its status will update on the document's page.</p>}
+        {result?.state === 'failed' && <p className="text-label font-medium text-verdict-content">The transaction did not succeed ({result.document?.failureReason || 'unknown reason'}). Nothing was issued.</p>}
+        {result?.document?.documentId && <Link to={`/officer/documents/${result.document.documentId}`} className="inline-block mt-2 font-semibold text-accent underline underline-offset-2 hover:text-accent-hover">Open this document</Link>}
         {result?.state === 'issued' && <button onClick={() => navigate('/officer')} className="ml-4 text-sm underline">Back to your documents</button>}
       </div>
     </Layout>

@@ -39,7 +39,7 @@ RPC=http://127.0.0.1:8545
 CHAIN_ID=31337
 # Hardhat account #0. Publicly known test key, worthless outside this local node.
 ISSUER_ADDR=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-ISSUER_NAME="NIT Calicut — Registrar"
+ISSUER_NAME="Officer 1"
 OUTSIDER_ADDR=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 
 PIDS=()

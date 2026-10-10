@@ -3,7 +3,7 @@
  *
  * Reads the deployed address from deployments/<network>.json, so no copy-paste.
  *
- *   ISSUERS="0xAddr=NIT Calicut — Registrar" \
+ *   ISSUERS="0xAddr=Officer 1" \
  *     npx hardhat run scripts/register-issuer.js --network localhost
  *
  * Separate several with a semicolon. Taken from the environment rather than
@@ -21,7 +21,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ISSUERS = [
-  // { address: "0x…", name: "NIT Calicut — Registrar" },
+  // { address: "0x…", name: "Officer 1" },
   // { address: "0x…", name: "Sub-Registrar Office, Kozhikode" },
 ];
 

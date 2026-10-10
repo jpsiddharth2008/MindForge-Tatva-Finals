@@ -11,8 +11,8 @@ const short = (h) => (h ? `${h.slice(0, 10)}…${h.slice(-6)}` : '—');
 
 function Row({ label, children }) {
   return (
-    <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-100 text-sm">
-      <dt className="font-semibold text-slate-600">{label}</dt>
+    <div className="grid grid-cols-3 gap-2 py-1 border-b border-line text-sm">
+      <dt className="font-semibold text-ink-soft">{label}</dt>
       <dd className="col-span-2 break-all">{children}</dd>
     </div>
   );
@@ -101,9 +101,9 @@ export default function DocumentDetail() {
           {doc.status === 'ISSUED' && (
             <form onSubmit={revoke} className="mt-6 border border-rose-200 rounded-lg p-4">
               <h3 className="font-bold text-rose-900 mb-1">Revoke this document</h3>
-              <p className="text-sm text-slate-600 mb-2">This is public and cannot be undone. The reason is stored on the blockchain and shown to anyone who verifies the document.</p>
-              <label className="block text-sm font-semibold mb-1" htmlFor="reason">Reason</label>
-              <input id="reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 mb-2" />
+              <p className="text-label text-ink-soft mb-2">This is public and cannot be undone. The reason is stored on the blockchain and shown to anyone who verifies the document.</p>
+              <label className="field-label" htmlFor="reason">Reason</label>
+              <input id="reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} className="w-full border border-line-strong rounded-lg px-3 py-2 mb-2" />
               <button type="submit" disabled={!reason.trim() || busy} className="bg-rose-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-rose-800 disabled:opacity-50">{busy ? 'Working…' : 'Revoke'}</button>
               <div aria-live="polite">
                 {busy && step && <p role="status" className="text-sm mt-2">{step}</p>}
@@ -111,16 +111,16 @@ export default function DocumentDetail() {
               </div>
             </form>
           )}
-          {note && <p role="status" className="mt-3 text-sm text-slate-800">{note}</p>}
+          {note && <p role="status" className="mt-3 text-label text-ink-soft">{note}</p>}
 
           <section className="mt-6">
             <h3 className="font-bold mb-2">History</h3>
-            {audit.length === 0 ? <p className="text-sm text-slate-600">No events recorded.</p> : (
+            {audit.length === 0 ? <p className="text-label text-ink-soft">No events recorded.</p> : (
               <table className="w-full text-sm text-left">
-                <thead><tr className="border-b border-slate-200 text-slate-600"><th className="py-1">When</th><th>Action</th><th>Outcome</th><th>Detail</th></tr></thead>
+                <thead><tr className="border-b border-line text-ink-soft"><th className="py-1">When</th><th>Action</th><th>Outcome</th><th>Detail</th></tr></thead>
                 <tbody>
                   {audit.map((e, i) => (
-                    <tr key={`${e.createdAt}-${i}`} className="border-b border-slate-100">
+                    <tr key={`${e.createdAt}-${i}`} className="border-b border-line">
                       <td className="py-1 whitespace-nowrap">{when(e.createdAt)}</td><td>{e.action}</td><td>{e.outcome}</td><td>{e.reason || ''}</td>
                     </tr>
                   ))}

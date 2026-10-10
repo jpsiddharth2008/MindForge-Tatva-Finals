@@ -38,7 +38,7 @@ export default function Dashboard() {
     <Layout title="Your documents">
       <div className="flex flex-wrap gap-3 mb-4" aria-label="Totals">
         {['ISSUED', 'REVOKED', 'BLOCKCHAIN_PENDING', 'FAILED'].map((s) => (
-          <div key={s} className="border border-slate-200 rounded-lg px-4 py-2 min-w-[7rem]">
+          <div key={s} className="rounded border border-line px-4 py-2 min-w-[7rem]">
             <div className="text-2xl font-extrabold" data-testid={`count-${s}`}>{counts[s] ?? 0}</div>
             <StatusBadge status={s} />
           </div>
@@ -48,37 +48,37 @@ export default function Dashboard() {
         <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1">
           {FILTERS.map(([value, label]) => (
             <button key={value || 'all'} onClick={() => setStatus(value)} aria-pressed={status === value}
-              className={`px-3 py-1 rounded-lg text-sm font-semibold ${status === value ? 'bg-[#111827] text-white' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'}`}>{label}</button>
+              className={`rounded px-3 py-1.5 text-label font-semibold transition-colors ${status === value ? 'bg-ink text-white' : 'bg-paper text-ink-soft border border-line hover:border-line-strong hover:text-ink'}`}>{label}</button>
           ))}
         </div>
-        <Link to="/officer/issue" className="bg-[#111827] text-white px-4 py-2 rounded-lg font-semibold hover:bg-black">Issue a document</Link>
+        <Link to="/officer/issue" className="bg-ink text-white px-4 py-2 rounded-lg font-semibold hover:bg-black">Issue a document</Link>
       </div>
 
-      {loading && <p role="status" className="text-slate-600">Loading…</p>}
+      {loading && <p role="status" className="text-ink-soft">Loading…</p>}
       {error && (
         <div role="alert" className="text-red-700 text-sm mb-2">{error} <button onClick={() => load()} className="underline font-semibold">Try again</button></div>
       )}
       {!loading && !error && docs.length === 0 && (
-        <p className="text-slate-600 py-6 text-center">{status ? 'No documents with this status.' : 'You have not issued any documents yet.'}</p>
+        <p className="text-ink-soft py-6 text-center">{status ? 'No documents with this status.' : 'You have not issued any documents yet.'}</p>
       )}
       {docs.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead><tr className="border-b border-slate-200 text-slate-600"><th className="py-2 pr-3">File</th><th className="pr-3">Status</th><th className="pr-3">Created</th><th /></tr></thead>
+            <thead><tr className="border-b border-line text-ink-soft"><th className="py-2 pr-3">File</th><th className="pr-3">Status</th><th className="pr-3">Created</th><th /></tr></thead>
             <tbody>
               {docs.map((d) => (
-                <tr key={d.documentId} className="border-b border-slate-100">
+                <tr key={d.documentId} className="border-b border-line">
                   <td className="py-2 pr-3 break-all">{d.originalFileName || d.documentId}</td>
                   <td className="pr-3"><StatusBadge status={d.status} /></td>
                   <td className="pr-3 whitespace-nowrap">{when(d.createdAt)}</td>
-                  <td><Link to={`/officer/documents/${d.documentId}`} className="text-blue-700 font-semibold underline">Open</Link></td>
+                  <td><Link to={`/officer/documents/${d.documentId}`} className="font-semibold text-accent underline underline-offset-2 hover:text-accent-hover">Open</Link></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {next && <button onClick={() => load(next)} disabled={more} className="mt-3 bg-slate-200 text-slate-900 px-4 py-2 rounded-lg font-semibold hover:bg-slate-300 disabled:opacity-50">{more ? 'Loading…' : 'Load more'}</button>}
+      {next && <button onClick={() => load(next)} disabled={more} className="btn-secondary mt-3">{more ? 'Loading…' : 'Load more'}</button>}
     </Layout>
   );
 }
