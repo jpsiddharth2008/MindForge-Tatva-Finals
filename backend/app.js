@@ -13,6 +13,7 @@ const { analyseImage, compareToAnchor } = require('./tier2');
 const { analyseVisual } = require('./phash');
 const { createVerification } = require('./verification');
 const { buildQrPayload } = require('./qr');
+const { stampQr } = require('./stamp');
 const { STATUSES } = require('./documents');
 const { TEMPLATE } = require('./extract');
 const { contentHash: computeContentHash, lookupKey: computeLookupKey, FieldError } = require('./content-hash');
@@ -143,6 +144,13 @@ function createApp({
             if (!file) return res.status(400).send("No file.");
 
             // 1. SHA-256 of the content. It is also the S3 key.
+            //
+            // The byte hash is taken from the file AS UPLOADED, and the QR is stamped later, on request
+            // (GET /api/documents/:id/certificate). That is a deliberate trade: stamping here instead would
+            // make the stamped file the only one whose byte hash is anchored, which is arguably more correct
+            // but changes what "the original" means and would need the corpus and the frontend to follow.
+            // The cost of doing it this way is that a stamped copy fails Tier 1 and verifies through Tier 2
+            // as AUTHENTIC_COPY. See stamp.js for why the ORDER is the whole question.
             const hash = sha256(file.buffer);
 
             // 2a. With a database: the record is claimed (PENDING) before the upload, an identical file is never issued
@@ -292,6 +300,53 @@ function createApp({
             if (doc.status !== 'ISSUED' || !doc.contentHash) return next(Object.assign(new Error('not issued'), { status: 409, publicMessage: 'Only an issued document with a content hash has a QR code.' }));
             if (!chainId || !contractAddress) return res.status(503).json({ success: false, error: 'The chain and contract are not configured.', requestId: req.id });
             res.json({ success: true, payload: buildQrPayload({ contentHash: doc.contentHash, chainId, contractAddress }) });
+        } catch (err) { next(err); }
+    });
+
+    // The certificate with its QR code stamped into the page, as a PNG to print or hand out (#58).
+    // POST, not GET: it takes the original file (see the note below the doc comment).
+    //
+    // WHAT THIS FILE IS, AND IS NOT. It is the same document with a pointer printed on it. Stamping cannot
+    // change the content hash - the QR lands in a region OCR ignores, which stamp.test.js asserts against a
+    // real re-read - so this file still verifies as the document it came from, through Tier 2.
+    //
+    // It will NOT match Tier 1: the byte hash anchored on chain belongs to the file the issuer uploaded, and
+    // these bytes are different ones. So a stamped copy verifies as AUTHENTIC_COPY, not AUTHENTIC_ORIGINAL.
+    // That is correct and not a downgrade in trust: AUTHENTIC_COPY is the verdict every real-world document
+    // gets, because Tier 1 only ever matches a file that never left the digital channel.
+    //
+    // And the QR proves nothing by itself - a genuine code photocopies onto a forgery perfectly well.
+    // Verification re-reads the fields and recomputes the hash regardless (verification.js).
+    // Takes the original file rather than reading it back from S3, for two reasons: the storage layer is
+    // write-and-sign-only (no read path, by design), and requiring the file lets the server PROVE it is
+    // stamping the registered document - the upload's byte hash must equal the one on the record. A file
+    // that is not the registered original is refused rather than stamped with a code it has no right to.
+    app.post('/api/documents/:id/certificate', fileLimit, auth.requireAuth, ...uploadFile, async (req, res, next) => {
+        try {
+            if (!documents) return res.status(503).json({ success: false, error: 'Document records are not available.', requestId: req.id });
+            if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return next(Object.assign(new Error('bad parameter'), { status: 400 }));
+            const file = req.file;
+            if (!file) return next(Object.assign(new Error('no file'), { status: 400, publicMessage: 'Attach the original document file.' }));
+            const doc = await documents.findByDocumentId(req.params.id);
+            if (!doc || doc.issuerName !== req.user.sub) return next(Object.assign(new Error('not found'), { status: 404 }));
+            if (doc.status !== 'ISSUED' || !doc.contentHash) {
+                return next(Object.assign(new Error('not issued'), { status: 409, publicMessage: 'Only an issued document with a content hash has a QR code.' }));
+            }
+            if (!chainId || !contractAddress) return res.status(503).json({ success: false, error: 'The chain and contract are not configured.', requestId: req.id });
+            if (file.detectedMime === 'application/pdf') {
+                return next(Object.assign(new Error('pdf'), { status: 415, publicMessage: 'A PDF cannot be stamped. The QR code is for rendered certificates; use the QR payload route and place it yourself.' }));
+            }
+            if (sha256(file.buffer) !== doc.sha256) {
+                return next(Object.assign(new Error('not the original'), { status: 409, publicMessage: 'That file is not the document registered under this id. Attach the exact file that was issued.' }));
+            }
+
+            const { buffer } = await stampQr(file.buffer, buildQrPayload({ contentHash: doc.contentHash, chainId, contractAddress }));
+
+            await record(req, { action: 'ISSUE', outcome: 'SUCCESS', reason: 'CERTIFICATE_STAMPED', actorName: req.user.sub, documentId: doc.documentId });
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Content-Disposition', `attachment; filename="certificate-${doc.documentId}.png"`);
+            res.setHeader('Cache-Control', 'no-store');     // it is a credential, not an asset
+            res.send(buffer);
         } catch (err) { next(err); }
     });
 
