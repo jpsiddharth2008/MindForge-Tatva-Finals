@@ -29,12 +29,12 @@ export default function Login() {
   return (
     <Layout narrow title="Officer login">
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label className="text-sm font-semibold" htmlFor="u">Username</label>
-        <input id="u" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" className="border border-slate-300 rounded-lg px-3 py-2" />
-        <label className="text-sm font-semibold" htmlFor="p">Password</label>
-        <input id="p" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="border border-slate-300 rounded-lg px-3 py-2" />
-        {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
-        <button type="submit" disabled={busy || !username || !password} className="bg-[#111827] text-white py-3 rounded-lg font-bold hover:bg-black disabled:opacity-50">
+        <label className="field-label" htmlFor="u">Username</label>
+        <input id="u" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" className="field" />
+        <label className="field-label" htmlFor="p">Password</label>
+        <input id="p" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="field" />
+        {error && <p role="alert" className="text-label font-medium text-verdict-content">{error}</p>}
+        <button type="submit" disabled={busy || !username || !password} className="btn-primary btn-block py-3">
           {busy ? 'Checking…' : 'Log in'}
         </button>
       </form>

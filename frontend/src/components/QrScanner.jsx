@@ -49,16 +49,16 @@ export default function QrScanner({ onResult, Scanner = Html5Qrcode }) {
   return (
     <div>
       <div className="flex flex-wrap gap-2 items-center">
-        <label className="text-sm bg-slate-200 text-slate-900 px-3 py-2 rounded-lg font-semibold hover:bg-white cursor-pointer">
+        <label className="text-sm btn-secondary px-3 py-2 rounded-lg font-semibold hover:bg-white cursor-pointer">
           Read QR from a photo
           <input type="file" accept="image/*" className="sr-only" onChange={fromPhoto} />
         </label>
         {!scanning
-          ? <button type="button" onClick={fromCamera} className="text-sm bg-slate-200 text-slate-900 px-3 py-2 rounded-lg font-semibold hover:bg-white">Scan with the camera</button>
+          ? <button type="button" onClick={fromCamera} className="text-sm btn-secondary px-3 py-2 rounded-lg font-semibold hover:bg-white">Scan with the camera</button>
           : <button type="button" onClick={stop} className="text-sm bg-red-100 text-red-900 px-3 py-2 rounded-lg font-semibold">Stop camera</button>}
       </div>
       <div id={elementId.current} data-testid="qr-reader" className="mt-2" style={{ maxWidth: 300 }} />
-      {message && <p role="status" className="text-sm text-slate-600 mt-1">{message}</p>}
+      {message && <p role="status" className="mt-1 text-label text-ink-soft">{message}</p>}
     </div>
   );
 }

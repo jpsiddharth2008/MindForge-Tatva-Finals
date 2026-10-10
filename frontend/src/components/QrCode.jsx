@@ -19,7 +19,7 @@ export default function QrCode({ payload, size = 192, filename = 'document-qr.pn
   return (
     <div ref={holder} className="inline-flex flex-col items-center gap-2">
       <QRCodeCanvas value={payload} size={size} includeMargin level="M" role="img" aria-label="QR code for this document" />
-      <button type="button" onClick={download} className="text-sm bg-slate-200 text-slate-900 px-3 py-1 rounded-lg font-semibold hover:bg-white">Download QR code</button>
+      <button type="button" onClick={download} className="text-sm btn-secondary px-3 py-1 rounded-lg font-semibold hover:bg-white">Download QR code</button>
     </div>
   );
 }
