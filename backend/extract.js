@@ -10,10 +10,21 @@ const TEMPLATE = {
     // Parts of the page that are not text. OCR is blind to them: left alone, grain and texture in a photo box get "read" as
     // stray letters at the end of nearby lines. The pictures themselves are checked by Tier 3 (appearance), not here.
     // Coordinates are fractions of the flattened page, CROPPED TO ITS PRINTED CONTENT (see imaging.cropToContent): { x0, y0, x1, y1 }.
-    ignoreRegions: [{ name: 'photo', x0: 0.78, y0: 0.24, x1: 1.0, y1: 0.51 }],
+    // The QR is ignored for that reason and for one more: the content hash the QR carries is READ FROM these fields, so if OCR
+    // could see the QR, stamping it would change the very hash printed inside it. See stamp.js. Padded 8px beyond the stamped
+    // box so no module of the code can graze the boundary.
+    ignoreRegions: [
+        { name: 'photo', x0: 0.78, y0: 0.24, x1: 1.0, y1: 0.51 },
+        { name: 'qr', x0: 0.6971, y0: 0.5365, x1: 0.9771, y1: 0.9786 },
+    ],
     // Where the photo sits (same coordinates). Tier 3 hashes this region on its own: a swapped photo shows up there far more
     // clearly than in its 4x4 grid tile, where the white margin around the photo dominates the hash.
     photoRegion: { x0: 0.8044, y0: 0.2655, x1: 0.9792, y1: 0.481 },
+    // Where stamp.js puts the QR, in the same coordinates. Derived from stamp.BOX; stamp.test.js re-derives it, so the two
+    // cannot drift apart silently.
+    // The ignore region starts at x 0.697; the rightmost field ink on the page (the end of the "Programme" line) is at 0.583,
+    // so no field is ever masked.
+    qrRegion: { x0: 0.7058, y0: 0.5503, x1: 0.9728, y1: 0.9717 },
     fields: [
         { key: 'issuer', labels: ['Issuer'] },
         { key: 'docType', labels: ['Document'] },
