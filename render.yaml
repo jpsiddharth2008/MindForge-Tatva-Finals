@@ -1,0 +1,85 @@
+# Render blueprint for the MindForge API.
+#
+#   Render dashboard -> New -> Blueprint -> point at this repo.
+#
+# Only the API is here. The frontend is a static Vite build and goes to Vercel
+# (see vercel.json); MongoDB is Atlas; the contract is on Sepolia.
+#
+# PLAN. Deliberately NOT the free tier. One verification loads a 5 MB Tesseract
+# language model and decodes a full-resolution image through sharp, with uploads
+# allowed up to 10 MB. That does not fit 512 MB reliably - it OOMs under exactly
+# the operation the product exists to perform. The free tier also spins down
+# after ~15 minutes idle and takes ~50 s to wake, which is the worst possible
+# behaviour when a judge opens the link cold.
+services:
+  - type: web
+    name: mindforge-api
+    runtime: node
+    plan: standard            # 2 GB. See the note above before downgrading.
+    region: singapore         # closest to India; keeps the RPC and Atlas hops short
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+
+    # Render restarts the service if this stops returning 2xx. The route reports
+    # each subsystem separately and returns 200 whenever the process is alive, so
+    # a degraded Mongo or RPC does not cause a restart loop - it stays up and says
+    # what is wrong.
+    healthCheckPath: /api/health
+
+    envVars:
+      # --- set by Render ---
+      - key: PORT
+        value: 10000          # Render injects this; server.js reads process.env.PORT
+
+      # Behind Render's load balancer every request otherwise appears to come from
+      # the proxy, so express-rate-limit would throttle all users as a single IP.
+      - key: TRUST_PROXY
+        value: 1
+
+      - key: NODE_ENV
+        value: production
+
+      # --- set these in the dashboard, NOT here ---
+      # sync: false means "prompt me, never store in git".
+      - key: MONGODB_URI            # Atlas SRV string. Network Access must allow 0.0.0.0/0:
+        sync: false                 # Render's egress IPs are not fixed on this plan.
+      - key: JWT_SECRET             # 48+ random bytes hex
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD_HASH    # bcrypt hash, never the password: npm run hash-password
+        sync: false
+      - key: BUCKET_NAME
+        sync: false
+      - key: REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY  # needs s3:PutObject + s3:GetObject on the bucket only
+        sync: false
+      - key: RPC_URL                # https://ethereum-sepolia-rpc.publicnode.com
+        sync: false
+      - key: CHAIN_ID               # 11155111 - MUST match the RPC, or every chain call fails
+        sync: false
+      - key: CONTRACT_ADDRESS       # from blockchain/deployments/sepolia.json
+        sync: false
+      - key: CORS_ORIGINS           # exact frontend origin, e.g. https://mindforge.vercel.app
+        sync: false                 # security.js matches exactly: no trailing slash, no wildcard
+
+      # Optional
+      - key: MAX_FILE_SIZE_MB
+        value: 10
+      - key: RATE_LIMIT_PER_MIN
+        value: 30
+      - key: S3_SSE
+        value: AES256
+      - key: PRESIGN_TTL_SECONDS
+        value: 300
+      - key: AUDIT_RETENTION_DAYS
+        value: 365
+
+# NOTE: there is deliberately no PRIVATE_KEY here. chain.js is read-only; the
+# issuing officer signs in their own wallet. A signing key on a public host
+# would be the single most valuable thing to steal in this system, and it would
+# buy nothing - the server never needs to sign.

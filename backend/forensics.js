@@ -75,7 +75,14 @@ function verify(input, t = THRESHOLDS) {
   }
   if (content) {
     const diffs = fieldDiffs(content.anchored, content.presented);
-    tiers.content = { match: diffs.length === 0, fieldDiffs: diffs, ocrConfidence: content.ocrConfidence ?? null };
+    tiers.content = {
+      match: diffs.length === 0, fieldDiffs: diffs, ocrConfidence: content.ocrConfidence ?? null,
+      // Whether the stored anchored values still hash to what is on chain. The verdict does not
+      // depend on it - that comes from the hashes - but a verifier must be told when the field
+      // values they are being shown could not be vouched for. Defaults to true for callers that
+      // do not check (the PDF path has no canonical record to verify).
+      anchoredRecordVerified: content.anchoredRecordVerified !== false,
+    };
   }
   if (visual) {
     tiers.visual = { distance: visual.distance, regions: visual.cellDistances || [],
