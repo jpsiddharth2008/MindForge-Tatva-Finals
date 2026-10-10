@@ -5,6 +5,7 @@ import QrCode from '../components/QrCode';
 import { anchorFile, getQrPayload, errorMessage, isUnauthorized } from '../api';
 import { runAnchorFlow } from '../flows';
 import { chainConfigured } from '../chain';
+import { SHOW_QR } from '../config';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';
 const EMPTY = { holder: '', dob: '' };
@@ -108,7 +109,7 @@ export default function Issue() {
         {result?.state === 'issued' && (
           <div className="mt-2 rounded border border-verdict-original/30 bg-verdict-original-bg p-4">
             <p className="mb-2 font-semibold text-verdict-original">Issued and anchored on the blockchain.</p>
-            {result.qr
+            {SHOW_QR && result.qr
               ? <><p className="text-sm mb-2">Print this QR code on the document. It holds only a fingerprint, never personal details.</p><QrCode payload={result.qr} /></>
               : <p className="text-sm">The QR code could not be loaded now; it is available on the document's page.</p>}
           </div>

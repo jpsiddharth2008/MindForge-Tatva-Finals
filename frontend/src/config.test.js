@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { explorerTxUrl } from './config';
@@ -48,5 +48,31 @@ describe('no hardcoded deployment details', () => {
 
   it('keeps the officer session out of browser storage', () => {
     for (const f of files) expect(readFileSync(f, 'utf8'), relative(root, f)).not.toMatch(/(localStorage|sessionStorage)\.|document\.cookie/);
+  });
+});
+
+// The rest of the suite runs with VITE_SHOW_QR=true (vite.config.js) so the QR
+// tests still exercise a real capability rather than a disabled one. That leaves
+// the DEFAULT untested, and the default is the entire point of the flag — so it
+// is pinned here. Re-imported each time because config.js reads import.meta.env
+// once, at module load.
+describe('SHOW_QR', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
+
+  const load = async () => {
+    vi.resetModules();
+    return (await import('./config.js')).SHOW_QR;
+  };
+
+  it('is off unless explicitly switched on', async () => {
+    for (const value of [undefined, '', 'false', '0', 'yes', 'TRUE', '1']) {
+      vi.stubEnv('VITE_SHOW_QR', value);
+      expect(await load(), `VITE_SHOW_QR=${JSON.stringify(value)} must not show the QR`).toBe(false);
+    }
+  });
+
+  it('is on for exactly the string "true"', async () => {
+    vi.stubEnv('VITE_SHOW_QR', 'true');
+    expect(await load()).toBe(true);
   });
 });

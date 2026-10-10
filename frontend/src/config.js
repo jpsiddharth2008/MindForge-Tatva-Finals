@@ -4,6 +4,17 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '';
 export const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID) || 0;
 
+/**
+ * Whether the QR code appears in the interface. Off by default: it is an extra
+ * step in a demo, and verification never depends on it — the document is always
+ * re-read and its hash recomputed, so a QR adds confirmation, not authority.
+ *
+ * This hides the UI only. The backend keeps the entire capability and its tests,
+ * including the one that matters most: a genuine QR photocopied onto a forgery
+ * is still rejected. Turn it back on with VITE_SHOW_QR=true — no code change.
+ */
+export const SHOW_QR = String(import.meta.env.VITE_SHOW_QR) === 'true';
+
 const EXPLORERS = {
   1: 'https://etherscan.io',
   137: 'https://polygonscan.com',

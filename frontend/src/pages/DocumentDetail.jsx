@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Layout, { StatusBadge } from '../components/Layout';
 import QrCode from '../components/QrCode';
+import { SHOW_QR } from '../config';
 import { getDocument, getAudit, getQrPayload, errorMessage, isUnauthorized } from '../api';
 import { runRevokeFlow } from '../flows';
 import { explorerTxUrl } from '../config';
@@ -96,7 +97,7 @@ export default function DocumentDetail() {
             )}
           </dl>
 
-          {qr && <section className="mt-4"><h3 className="font-bold mb-2">QR code</h3><QrCode payload={qr} filename={`${doc.documentId}-qr.png`} /></section>}
+          {SHOW_QR && qr && <section className="mt-4"><h3 className="font-bold mb-2">QR code</h3><QrCode payload={qr} filename={`${doc.documentId}-qr.png`} /></section>}
 
           {doc.status === 'ISSUED' && (
             <form onSubmit={revoke} className="mt-6 border border-rose-200 rounded-lg p-4">

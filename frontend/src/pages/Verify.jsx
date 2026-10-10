@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import VerdictCard from '../components/VerdictCard';
 import QrScanner from '../components/QrScanner';
 import { verifyDocument, errorMessage } from '../api';
+import { SHOW_QR } from '../config';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';
 
@@ -37,14 +38,16 @@ export default function Verify({ Scanner }) {
       <input id="doc" type="file" accept={ACCEPT} onChange={(e) => { setFile(e.target.files?.[0] || null); setReport(null); setError(''); }}
         className="field-file mb-4" />
 
-      <details className="mb-4" open={!!qr}>
-        <summary className="text-sm font-semibold cursor-pointer">The document has a QR code (optional)</summary>
-        <p className="text-xs text-ink-soft my-2">A QR code is checked <em>against the document itself</em>. A real code copied onto a different document is rejected.</p>
-        <QrScanner onResult={setQr} Scanner={Scanner} />
-        <label className="block text-xs font-semibold mt-3" htmlFor="qrtext">QR code text</label>
-        <textarea id="qrtext" value={qr} onChange={(e) => setQr(e.target.value)} rows={2} placeholder="Filled in when you scan a code, or paste its text"
-          className="w-full text-xs border border-line-strong rounded-lg p-2 font-mono" />
-      </details>
+      {SHOW_QR && (
+        <details className="mb-4" open={!!qr}>
+          <summary className="cursor-pointer text-label font-semibold">The document has a QR code (optional)</summary>
+          <p className="my-2 text-micro text-ink-soft">A QR code is checked <em>against the document itself</em>. A real code copied onto a different document is rejected.</p>
+          <QrScanner onResult={setQr} Scanner={Scanner} />
+          <label className="field-label mt-3" htmlFor="qrtext">QR code text</label>
+          <textarea id="qrtext" value={qr} onChange={(e) => setQr(e.target.value)} rows={2} placeholder="Filled in when you scan a code, or paste its text"
+            className="field font-mono text-micro" />
+        </details>
+      )}
 
       <button onClick={run} disabled={!file || busy} className="btn-primary btn-block py-3">
         {busy ? 'Checking…' : 'Verify'}
