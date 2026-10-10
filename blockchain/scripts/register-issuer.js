@@ -2,9 +2,14 @@
  * Registers institutions on the issuer allowlist.
  *
  * Reads the deployed address from deployments/<network>.json, so no copy-paste.
- * Edit ISSUERS below, then:
  *
- *   npx hardhat run scripts/register-issuer.js --network amoy
+ *   ISSUERS="0xAddr=NIT Calicut — Registrar" \
+ *     npx hardhat run scripts/register-issuer.js --network localhost
+ *
+ * Separate several with a semicolon. Taken from the environment rather than
+ * edited into this file because the addresses differ per network: a local
+ * Hardhat address hardcoded here would be committed and then be wrong on
+ * Sepolia. ISSUERS below stays as a fallback for a fixed, long-lived list.
  *
  * IMPORTANT for the demo: keep one wallet OFF this list. Attempting to anchor
  * from it must revert with NotAuthorisedIssuer — that is the proof that a green
@@ -19,6 +24,19 @@ const ISSUERS = [
   // { address: "0x…", name: "NIT Calicut — Registrar" },
   // { address: "0x…", name: "Sub-Registrar Office, Kozhikode" },
 ];
+
+/** ISSUERS="0xabc…=Name One;0xdef…=Name Two" */
+function fromEnv(raw) {
+  return raw.split(";").map((entry) => {
+    const at = entry.indexOf("=");
+    if (at < 1) throw new Error(`Malformed ISSUERS entry: "${entry}". Expected 0xAddress=Name`);
+    const address = entry.slice(0, at).trim();
+    const name = entry.slice(at + 1).trim();
+    if (!hre.ethers.isAddress(address)) throw new Error(`Not an address: "${address}"`);
+    if (!name) throw new Error(`Issuer ${address} needs a name; an empty name means "not authorised".`);
+    return { address, name };
+  });
+}
 
 async function main() {
   const file = path.join(__dirname, "..", "deployments", `${hre.network.name}.json`);
@@ -38,13 +56,14 @@ async function main() {
     );
   }
 
-  if (ISSUERS.length === 0) {
-    console.log("No issuers configured. Edit ISSUERS at the top of this script.");
+  const issuers = process.env.ISSUERS ? fromEnv(process.env.ISSUERS) : ISSUERS;
+  if (issuers.length === 0) {
+    console.log('No issuers configured. Set ISSUERS="0xAddress=Name" or edit ISSUERS at the top of this script.');
     return;
   }
 
   console.log("registry:", address);
-  for (const { address: issuer, name } of ISSUERS) {
+  for (const { address: issuer, name } of issuers) {
     if (await registry.isIssuer(issuer)) {
       console.log("· already registered:", name);
       continue;
