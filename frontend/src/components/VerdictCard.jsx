@@ -3,15 +3,22 @@ import { CHAIN_ID, explorerTxUrl } from '../config';
 
 // One look per verdict, so AUTHENTIC_COPY and TAMPERED_VISUAL can never be mistaken for each other
 // (and nothing is a bare green/red binary). Takes the answer from POST /api/verify.
+// The wording carries as much weight as the verdict itself. Two traps it is written around:
+//
+//   1. AUTHENTIC_COPY must not read as second-class. It is the NORMAL result for any real
+//      document, because anything printed, scanned or forwarded has different bytes. A verifier
+//      who reads "copy" as "not the real thing" has been misled by us, not by the document.
+//   2. NOT_REGISTERED must not read as "forgery". It means no match was found, which also
+//      happens to a genuine document that was never issued through this system.
 export const STYLES = {
-  AUTHENTIC_ORIGINAL: { color: '#15803d', bg: '#f0fdf4', icon: '✔', title: 'Authentic original', note: 'This is exactly the file that was registered.' },
-  AUTHENTIC_COPY: { color: '#0369a1', bg: '#f0f9ff', icon: '⧉', title: 'Authentic copy', note: 'A scan, photo or forward: the content matches the registered document.' },
-  TAMPERED_VISUAL: { color: '#b45309', bg: '#fffbeb', icon: '◩', title: 'Appearance changed', note: 'The text matches but part of the picture does not. Check the boxed region.' },
-  TAMPERED_CONTENT: { color: '#b91c1c', bg: '#fef2f2', icon: '✖', title: 'Content altered', note: 'One or more fields differ from the registered document.' },
-  INCONCLUSIVE: { color: '#6b7280', bg: '#f9fafb', icon: '?', title: 'Inconclusive', note: 'The document could not be checked reliably. Please provide a clearer capture.' },
-  NOT_REGISTERED: { color: '#7c3aed', bg: '#faf5ff', icon: '∅', title: 'Not registered', note: 'No registered document matches this one.' },
-  REVOKED: { color: '#9f1239', bg: '#fff1f2', icon: '⊘', title: 'Revoked', note: 'The issuer withdrew this document. It is no longer valid.' },
-  QR_MISMATCH: { color: '#c2410c', bg: '#fff7ed', icon: '⇄', title: 'QR code does not match', note: 'The QR code does not belong to this document.' },
+  AUTHENTIC_ORIGINAL: { color: '#15803d', bg: '#f0fdf4', icon: '✔', title: 'Authentic original', note: 'Genuine, and byte-for-byte the exact file the issuer registered.' },
+  AUTHENTIC_COPY: { color: '#0369a1', bg: '#f0f9ff', icon: '⧉', title: 'Authentic copy', note: 'Genuine. The file itself differs because the document was photographed, scanned or forwarded, but every printed detail matches what the issuer registered. This is the normal result for a document that has left the digital channel.' },
+  TAMPERED_VISUAL: { color: '#b45309', bg: '#fffbeb', icon: '◩', title: 'Appearance changed', note: 'Every printed detail matches, but part of the image does not — most often a replaced photograph. The boxed region is where it differs. Appearance is advisory: confirm with the issuer before acting on it.' },
+  TAMPERED_CONTENT: { color: '#b91c1c', bg: '#fef2f2', icon: '✖', title: 'Content altered', note: 'A printed detail does not match what the issuer registered. The fields that differ are listed below.' },
+  INCONCLUSIVE: { color: '#6b7280', bg: '#f9fafb', icon: '?', title: 'Inconclusive', note: 'Not enough could be read to judge this document. That is deliberately not a verdict — a poor photograph must never be mistaken for a forgery. Try again, flatter and in better light.' },
+  NOT_REGISTERED: { color: '#7c3aed', bg: '#faf5ff', icon: '∅', title: 'Not registered', note: 'No registered document matches this one. Either it was never issued through this registry, or it has been altered past recognition. This is not by itself proof of forgery.' },
+  REVOKED: { color: '#9f1239', bg: '#fff1f2', icon: '⊘', title: 'Revoked', note: 'The issuer withdrew this document. It is no longer valid, even though it is otherwise genuine and unaltered.' },
+  QR_MISMATCH: { color: '#c2410c', bg: '#fff7ed', icon: '⇄', title: 'QR code does not match', note: 'The QR code points at a different document. A genuine code photocopies onto a forgery perfectly well, so the code alone proves nothing — the document itself is what was checked.' },
 };
 
 // Appearance only matters when the text matched but the bytes did not (or when it could not be read). For a byte-identical file or an
