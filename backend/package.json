@@ -39,5 +39,8 @@
   "devDependencies": {
     "jsqr": "^1.4.0",
     "mongodb-memory-server": "^10.4.3"
+  },
+  "engines": {
+    "node": ">=20.11 <25"
   }
 }
